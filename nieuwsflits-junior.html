@@ -631,10 +631,11 @@ textarea { resize: vertical; min-height: 68px; }
   #editor, .preview-label, .mobiel-printbalk { display: none !important; }
   /* iOS Safari voegt bij printen een eigen kop/voettekst (datum, URL, paginanr)
      toe die je niet kunt uitzetten; die eet verticale ruimte op waardoor de krant
-     op 100% net over 2 pagina's valt. We verkleinen daarom automatisch tot 87%
-     (zoom) — precies wat je anders handmatig deed. Blijft goed leesbaar en
-     centreert netjes. Waarde makkelijk aan te passen als het nog niet klopt. */
-  #krant { box-shadow: none; max-width: 100%; margin: 0 auto; width: 100%; zoom: 0.87; }
+     op 100% net over 2 pagina's valt. We verkleinen daarom automatisch (zoom) —
+     precies wat je anders handmatig deed. Blijft goed leesbaar en centreert netjes.
+     Afgestemd op iPhone/AirPrint: print bij 100% in het printvenster op 1 pagina.
+     Waarde makkelijk aan te passen (kleiner getal = kleiner op papier). */
+  #krant { box-shadow: none; max-width: 100%; margin: 0 auto; width: 100%; zoom: 0.84; }
 
   /* Schaduwen printen vlekkerig — vervang door dunne randen */
   .artikel, .weather-strip, .wjd-box, .dag-chip, .mop-box {
