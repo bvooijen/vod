@@ -244,93 +244,54 @@ textarea { resize: vertical; min-height: 68px; }
   opacity: 0.55;
 }
 
-/* MASTHEAD — title centred, kalender absolute right */
+/* MASTHEAD — zwart-wit logo + kalender rechts (grijstinten; spaart kleureninkt) */
 .masthead {
-  background: #0E8F86;
-  padding: 20px 24px 20px 24px;
-  text-align: center;
-  position: relative;
+  background: #fff;
+  padding: 14px 22px 12px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border-bottom: 3px solid #111;
 }
 .masthead-spacer { display: none; }
-.masthead-center { display: inline-block; }
-.masthead-logo {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.25em;
-  color: #9FD9D3;
-  margin-bottom: 6px;
+.masthead-logo-blok {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 11px;
+  min-width: 0;
 }
-.masthead-title {
-  font-size: 3rem;
-  font-weight: 900;
-  color: #FFC93D;
-  line-height: 1;
-  text-shadow: 3px 3px 0 rgba(0,0,0,0.25);
+.mh-het { font-size: 2.9rem; font-weight: 800; color: #111; line-height: 0.85; }
+.mh-vod-wrap { display: flex; flex-direction: column; align-items: flex-start; }
+.mh-boventitel {
+  font-size: 0.66rem; font-weight: 600; color: #444;
+  letter-spacing: 0.01em; margin-bottom: 3px; white-space: nowrap;
 }
-.masthead-tagline {
-  font-size: 0.9rem;
-  color: #CDEEE9;
-  margin-top: 5px;
-  letter-spacing: 0.04em;
-}
-.masthead-date {
-  display: inline-block;
-  margin-top: 9px;
-  background: rgba(255,255,255,0.15);
-  color: #fff;
-  padding: 5px 18px;
-  border-radius: 30px;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
+.mh-vod { font-size: 2.9rem; font-weight: 900; color: #111; line-height: 0.85; letter-spacing: -0.01em; }
+.mh-streep { align-self: stretch; width: 2px; background: #111; margin: 3px 5px; }
+.mh-tagline { font-size: 1.02rem; font-weight: 500; color: #111; line-height: 1.12; white-space: nowrap; }
+.masthead-rechts { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.masthead-date { font-size: 0.82rem; font-weight: 700; color: #333; }
 
-/* MINI-KALENDER in masthead — absolute top-right */
+/* MINI-KALENDER — grijstinten */
 .masthead-kalender {
-  position: absolute;
-  top: 50%;
-  right: 16px;
-  transform: translateY(-50%);
-  background: rgba(255,255,255,0.12);
-  border-radius: 10px;
-  padding: 8px 10px;
+  background: #f2f2f2;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  padding: 6px 9px;
 }
 .kal-header {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #FFC93D;
-  text-align: center;
-  margin-bottom: 6px;
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #222; text-align: center; margin-bottom: 5px;
 }
-.kal-tabel {
-  border-collapse: separate;
-  border-spacing: 1px;
-}
-.kal-tabel th {
-  font-size: 0.58rem;
-  color: rgba(255,255,255,0.5);
-  text-align: center;
-  padding: 1px 4px;
-  font-weight: 600;
-}
+.kal-tabel { border-collapse: separate; border-spacing: 1px; }
+.kal-tabel th { font-size: 0.56rem; color: #999; text-align: center; padding: 1px 4px; font-weight: 600; }
 .kal-tabel td {
-  font-size: 0.68rem;
-  color: rgba(255,255,255,0.75);
-  text-align: center;
-  padding: 2px 4px;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  line-height: 16px;
+  font-size: 0.66rem; color: #444; text-align: center; padding: 2px 4px;
+  border-radius: 50%; width: 20px; height: 20px; line-height: 16px;
 }
-.kal-tabel td.vandaag {
-  background: #FFC93D;
-  color: #0E8F86;
-  font-weight: 900;
-  border-radius: 50%;
-}
-.kal-tabel td.weekend { color: rgba(255,200,100,0.7); }
+.kal-tabel td.vandaag { background: #111; color: #fff; font-weight: 900; }
+.kal-tabel td.weekend { color: #aaa; }
 
 /* WEATHER */
 /* Weer + mop naast elkaar */
@@ -653,16 +614,16 @@ textarea { resize: vertical; min-height: 68px; }
   .dag-naam { font-size: 0.74rem; }
   .dag-act  { font-size: 0.66rem; }
 
-  /* Masthead — compact maar aanwezig */
-  .masthead { padding: 10px 20px; }
-  .masthead-logo { font-size: 0.64rem; margin-bottom: 3px; }
-  .masthead-title { font-size: 2.2rem; text-shadow: 2px 2px 0 rgba(0,0,0,0.25); }
-  .masthead-tagline { font-size: 0.8rem; margin-top: 3px; }
-  .masthead-date { margin-top: 6px; padding: 3px 15px; font-size: 0.85rem; }
-  .masthead-kalender { padding: 7px 9px; right: 12px; }
-  .kal-header { font-size: 0.66rem; margin-bottom: 4px; }
-  .kal-tabel th { font-size: 0.55rem; padding: 0 3px; }
-  .kal-tabel td { font-size: 0.64rem; padding: 1px 3px; width: 18px; height: 18px; line-height: 16px; }
+  /* Masthead — compact maar aanwezig (zwart-wit logo) */
+  .masthead { padding: 9px 20px 8px; gap: 14px; border-bottom-width: 2px; }
+  .mh-het, .mh-vod { font-size: 2.2rem; }
+  .mh-boventitel { font-size: 0.6rem; margin-bottom: 2px; }
+  .mh-tagline { font-size: 0.9rem; }
+  .masthead-date { font-size: 0.76rem; }
+  .masthead-kalender { padding: 5px 8px; }
+  .kal-header { font-size: 0.6rem; margin-bottom: 3px; }
+  .kal-tabel th { font-size: 0.52rem; padding: 0 3px; }
+  .kal-tabel td { font-size: 0.6rem; padding: 1px 3px; width: 17px; height: 17px; line-height: 15px; }
 
   /* Weer + mop */
   .weer-rij { margin: 8px 22px 0; gap: 11px; }
@@ -726,9 +687,10 @@ textarea { resize: vertical; min-height: 68px; }
   .krant-footer { padding: 5px 12px; font-size: 0.66rem; }
 
   /* Vangnet: wordt automatisch actief als de inhoud anders niet op 1 A4 past */
-  body.print-compact .masthead { padding: 11px 18px; }
-  body.print-compact .masthead-title { font-size: 2rem; }
-  body.print-compact .masthead-date { margin-top: 5px; font-size: 0.8rem; }
+  body.print-compact .masthead { padding: 7px 18px 6px; }
+  body.print-compact .mh-het, body.print-compact .mh-vod { font-size: 1.9rem; }
+  body.print-compact .mh-tagline { font-size: 0.82rem; }
+  body.print-compact .masthead-date { font-size: 0.72rem; }
   body.print-compact .dagplanning { padding: 7px 24px 0; }
   body.print-compact .dag-kop { margin-bottom: 5px; }
   body.print-compact .dag-chip { padding: 4px 3px; }
@@ -977,14 +939,19 @@ textarea { resize: vertical; min-height: 68px; }
   </div>
 
   <div class="masthead">
-    <div class="masthead-spacer" id="masthead-spacer"></div>
-    <div class="masthead-center">
-      <div class="masthead-logo">Het Van Ooijen Dagblad</div>
-      <div class="masthead-title">Het VOD</div>
-      <div class="masthead-tagline">Elke dag een beetje slimmer</div>
-      <div class="masthead-date" id="k-datum"></div>
+    <div class="masthead-logo-blok">
+      <span class="mh-het">het</span>
+      <span class="mh-vod-wrap">
+        <span class="mh-boventitel">Het Van Ooijen Dagblad</span>
+        <span class="mh-vod">VOD</span>
+      </span>
+      <span class="mh-streep"></span>
+      <span class="mh-tagline">elke dag een<br>beetje slimmer.</span>
     </div>
-    <div class="masthead-kalender" id="k-kalender"></div>
+    <div class="masthead-rechts">
+      <div class="masthead-date" id="k-datum"></div>
+      <div class="masthead-kalender" id="k-kalender"></div>
+    </div>
   </div>
 
   <div class="weer-rij">
