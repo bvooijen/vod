@@ -459,6 +459,8 @@ textarea { resize: vertical; min-height: 68px; }
 .artikel-rij { display: flex; gap: 14px; margin-bottom: 14px; }
 .artikel-rij .artikel { flex: 1; margin-bottom: 0; }
 
+/* Bovenrij per artikel: bolletje + bronvermelding naast elkaar */
+.artikel-top { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .artikel-badge {
   display: inline-flex;
   align-items: center;
@@ -469,11 +471,21 @@ textarea { resize: vertical; min-height: 68px; }
   color: #fff;
   font-size: 0.8rem;
   font-weight: 800;
-  margin-bottom: 7px;
+  flex-shrink: 0;
 }
 .a1 .artikel-badge { background: #FF6F61; }
 .a2 .artikel-badge { background: #0E8F86; }
 .a3 .artikel-badge { background: #F0A202; }
+
+.artikel-bron {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #6b7a8c;
+  text-transform: lowercase;
+  letter-spacing: 0.01em;
+}
+.artikel-bron:empty { display: none; }
+.artikel-bron::before { content: 'bron: '; color: #9aa7b4; font-weight: 600; }
 
 .artikel-kop {
   font-size: 1.3rem;
@@ -666,7 +678,9 @@ textarea { resize: vertical; min-height: 68px; }
   .section-kop { margin-bottom: 8px; font-size: 0.66rem; }
   .artikel { padding: 12px 16px 11px; margin-bottom: 10px; border-radius: 13px; border-top-width: 4px; }
   .artikel-rij { gap: 12px; margin-bottom: 10px; }
-  .artikel-badge { width: 22px; height: 22px; font-size: 0.72rem; margin-bottom: 4px; }
+  .artikel-top { gap: 7px; margin-bottom: 5px; }
+  .artikel-badge { width: 22px; height: 22px; font-size: 0.72rem; }
+  .artikel-bron { font-size: 0.66rem; }
   .artikel-kop {
     font-size: 1.12rem;
     margin-bottom: 6px;
@@ -992,18 +1006,27 @@ textarea { resize: vertical; min-height: 68px; }
     <div class="section-kop">Nieuws van vandaag</div>
 
     <div class="artikel a1 hoofd">
-      <div class="artikel-badge">1</div>
+      <div class="artikel-top">
+        <div class="artikel-badge">1</div>
+        <div class="artikel-bron" id="k-bron1"></div>
+      </div>
       <div class="artikel-kop" id="k-t1">Laden&hellip;</div>
       <div class="artikel-tekst" id="k-b1">&nbsp;</div>
     </div>
     <div class="artikel-rij">
       <div class="artikel a2">
-        <div class="artikel-badge">2</div>
+        <div class="artikel-top">
+          <div class="artikel-badge">2</div>
+          <div class="artikel-bron" id="k-bron2"></div>
+        </div>
         <div class="artikel-kop" id="k-t2">Laden&hellip;</div>
         <div class="artikel-tekst" id="k-b2">&nbsp;</div>
       </div>
       <div class="artikel a3">
-        <div class="artikel-badge">3</div>
+        <div class="artikel-top">
+          <div class="artikel-badge">3</div>
+          <div class="artikel-bron" id="k-bron3"></div>
+        </div>
         <div class="artikel-kop" id="k-t3">Laden&hellip;</div>
         <div class="artikel-tekst" id="k-b3">&nbsp;</div>
       </div>
@@ -1480,6 +1503,7 @@ function update() {
                     : niveau === 'moeilijk'  ? '! taal versimpelen'
                     : '';
     document.getElementById('k-b' + n).textContent = document.getElementById('e-b' + n).value || ' ';
+    document.getElementById('k-bron' + n).textContent = BRONNEN[n] || '';
   }
   document.getElementById('k-wjd').textContent = document.getElementById('e-wjd').value || 'Laden…';
   document.getElementById('k-mop').textContent = document.getElementById('e-mop').value || 'Laden…';
@@ -1581,6 +1605,13 @@ function slugNaarTekst(url) {
   return m ? m[1].replace(/-/g, ' ') : '';
 }
 
+// Bronvermelding per artikel (domein), getoond naast het bolletje.
+var BRONNEN = { 1: '', 2: '', 3: '' };
+function domeinVanUrl(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); }
+  catch(e) { return ''; }
+}
+
 // Rotatie: onthoud welke artikelen al getoond zijn, zodat "Ververs nieuws"
 // telkens verse berichten laat zien in plaats van dezelfde drie.
 var jjUrlCache = [];
@@ -1662,6 +1693,7 @@ async function loadJeugdjournaal() {
     var tekst = await slimVerkortTekst(a.bron);
     document.getElementById('e-t' + (idx + 1)).value = kop;
     document.getElementById('e-b' + (idx + 1)).value = tekst;
+    BRONNEN[idx + 1] = domeinVanUrl(a.url) || 'jeugdjournaal.nl';
     jjGetoond[a.url] = true;
   }));
   update();
@@ -1756,6 +1788,7 @@ async function loadNieuws() {
     var tekst = await slimVerkortTekst(cleanText(item.description));
     document.getElementById('e-t' + (idx + 1)).value = kop;
     document.getElementById('e-b' + (idx + 1)).value = tekst;
+    BRONNEN[idx + 1] = (item.source === 'NOS') ? 'nos.nl' : 'rtlnieuws.nl';
     nosrtlGetoond[item.title] = true;
   }));
   update();
@@ -2241,6 +2274,7 @@ async function autoLoadNoodmodus() {
   NOOD_BERICHTEN.forEach(function(item, idx) {
     document.getElementById('e-t' + (idx + 1)).value = item.t;
     document.getElementById('e-b' + (idx + 1)).value = item.b;
+    BRONNEN[idx + 1] = '';  // noodkrant: geen echte nieuwsbron
   });
   loadWistJeDat({ zonderAfbeelding: true });
   loadMop();
