@@ -629,7 +629,12 @@ textarea { resize: vertical; min-height: 68px; }
   @page { size: A4 portrait; margin: 6mm 10mm; }
   body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #editor, .preview-label, .mobiel-printbalk { display: none !important; }
-  #krant { box-shadow: none; max-width: 100%; margin: 0; width: 100%; }
+  /* iOS Safari voegt bij printen een eigen kop/voettekst (datum, URL, paginanr)
+     toe die je niet kunt uitzetten; die eet verticale ruimte op waardoor de krant
+     op 100% net over 2 pagina's valt. We verkleinen daarom automatisch tot 87%
+     (zoom) — precies wat je anders handmatig deed. Blijft goed leesbaar en
+     centreert netjes. Waarde makkelijk aan te passen als het nog niet klopt. */
+  #krant { box-shadow: none; max-width: 100%; margin: 0 auto; width: 100%; zoom: 0.87; }
 
   /* Schaduwen printen vlekkerig — vervang door dunne randen */
   .artikel, .weather-strip, .wjd-box, .dag-chip, .mop-box {
