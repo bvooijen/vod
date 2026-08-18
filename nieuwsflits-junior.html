@@ -258,18 +258,19 @@ textarea { resize: vertical; min-height: 68px; }
   flex: 1;
   display: flex;
   align-items: flex-end;
-  gap: 11px;
+  justify-content: center;   /* gecentreerd tussen linkermarge en kalender */
+  gap: 15px;
   min-width: 0;
 }
-.mh-het { font-size: 2.9rem; font-weight: 800; color: #111; line-height: 0.85; }
+.mh-het { font-size: 4rem; font-weight: 800; color: #111; line-height: 0.85; }
 .mh-vod-wrap { display: flex; flex-direction: column; align-items: flex-start; }
 .mh-boventitel {
-  font-size: 0.66rem; font-weight: 600; color: #444;
-  letter-spacing: 0.01em; margin-bottom: 3px; white-space: nowrap;
+  font-size: 0.92rem; font-weight: 600; color: #444;
+  letter-spacing: 0.01em; margin-bottom: 4px; white-space: nowrap;
 }
-.mh-vod { font-size: 2.9rem; font-weight: 900; color: #111; line-height: 0.85; letter-spacing: -0.01em; }
-.mh-streep { align-self: stretch; width: 2px; background: #111; margin: 3px 5px; }
-.mh-tagline { font-size: 1.02rem; font-weight: 500; color: #111; line-height: 1.12; white-space: nowrap; }
+.mh-vod { font-size: 4rem; font-weight: 900; color: #111; line-height: 0.85; letter-spacing: -0.01em; }
+.mh-streep { align-self: stretch; width: 2.5px; background: #111; margin: 4px 7px; }
+.mh-tagline { font-size: 1.42rem; font-weight: 500; color: #111; line-height: 1.12; white-space: nowrap; }
 .masthead-rechts { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .masthead-date { font-size: 0.82rem; font-weight: 700; color: #333; }
 
@@ -539,10 +540,11 @@ textarea { resize: vertical; min-height: 68px; }
 .puzzel-svg svg { width: 100%; height: auto; max-height: 150px; }
 
 .krant-footer {
-  background: #0E8F86;
-  color: #9FD9D3;
+  background: #fff;
+  color: #666;
+  border-top: 2px solid #111;
   text-align: center;
-  padding: 9px 16px;
+  padding: 8px 16px;
   font-size: 0.75rem;
   letter-spacing: 0.05em;
 }
@@ -616,9 +618,9 @@ textarea { resize: vertical; min-height: 68px; }
 
   /* Masthead — compact maar aanwezig (zwart-wit logo) */
   .masthead { padding: 9px 20px 8px; gap: 14px; border-bottom-width: 2px; }
-  .mh-het, .mh-vod { font-size: 2.2rem; }
-  .mh-boventitel { font-size: 0.6rem; margin-bottom: 2px; }
-  .mh-tagline { font-size: 0.9rem; }
+  .mh-het, .mh-vod { font-size: 3.1rem; }
+  .mh-boventitel { font-size: 0.82rem; margin-bottom: 3px; }
+  .mh-tagline { font-size: 1.25rem; }
   .masthead-date { font-size: 0.76rem; }
   .masthead-kalender { padding: 5px 8px; }
   .kal-header { font-size: 0.6rem; margin-bottom: 3px; }
@@ -688,8 +690,8 @@ textarea { resize: vertical; min-height: 68px; }
 
   /* Vangnet: wordt automatisch actief als de inhoud anders niet op 1 A4 past */
   body.print-compact .masthead { padding: 7px 18px 6px; }
-  body.print-compact .mh-het, body.print-compact .mh-vod { font-size: 1.9rem; }
-  body.print-compact .mh-tagline { font-size: 0.82rem; }
+  body.print-compact .mh-het, body.print-compact .mh-vod { font-size: 2.6rem; }
+  body.print-compact .mh-tagline { font-size: 1.05rem; }
   body.print-compact .masthead-date { font-size: 0.72rem; }
   body.print-compact .dagplanning { padding: 7px 24px 0; }
   body.print-compact .dag-kop { margin-bottom: 5px; }
