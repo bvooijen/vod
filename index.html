@@ -179,6 +179,20 @@ textarea { resize: vertical; min-height: 68px; }
 .news-block:nth-child(2) .block-label { color: #FF6F61; }
 .news-block:nth-child(3) .block-label { color: #F0A202; }
 
+/* Per-bericht bronknoppen (Jeugdjournaal / NOS / RTL) */
+.bron-knoppen {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  font-size: 0.72rem; color: #888; margin-bottom: 6px;
+}
+.bron-knop {
+  background: #eef1f6; color: #33404d; border: 1.5px solid #cdd6e2;
+  border-radius: 6px; padding: 3px 9px; font-size: 0.72rem; font-weight: 700;
+  cursor: pointer; transition: background 0.15s;
+}
+.bron-knop:hover:not(:disabled) { background: #dde4ee; }
+.bron-knop:disabled { opacity: 0.5; cursor: default; }
+.bron-status { font-size: 0.7rem; color: #888; }
+
 .auto-tag {
   display: inline-block;
   background: #e8f0fe;
@@ -784,6 +798,12 @@ textarea { resize: vertical; min-height: 68px; }
     <div class="news-blocks">
       <div class="news-block">
         <div class="block-label">Bericht 1 &mdash; gisteren <span class="taal-tag" id="taal-1"></span></div>
+        <div class="bron-knoppen">Ververs uit:
+          <button class="bron-knop" onclick="verversArtikel(1,'jeugdjournaal.nl',this)">Jeugdjournaal</button>
+          <button class="bron-knop" onclick="verversArtikel(1,'nos.nl',this)">NOS</button>
+          <button class="bron-knop" onclick="verversArtikel(1,'rtlnieuws.nl',this)">RTL</button>
+          <span class="bron-status" id="bron-status-1"></span>
+        </div>
         <label for="e-t1">Titel</label>
         <input type="text" id="e-t1" placeholder="Laden…" oninput="update()">
         <label for="e-b1">Tekst</label>
@@ -791,6 +811,12 @@ textarea { resize: vertical; min-height: 68px; }
       </div>
       <div class="news-block">
         <div class="block-label">Bericht 2 &mdash; gisteren <span class="taal-tag" id="taal-2"></span></div>
+        <div class="bron-knoppen">Ververs uit:
+          <button class="bron-knop" onclick="verversArtikel(2,'jeugdjournaal.nl',this)">Jeugdjournaal</button>
+          <button class="bron-knop" onclick="verversArtikel(2,'nos.nl',this)">NOS</button>
+          <button class="bron-knop" onclick="verversArtikel(2,'rtlnieuws.nl',this)">RTL</button>
+          <span class="bron-status" id="bron-status-2"></span>
+        </div>
         <label for="e-t2">Titel</label>
         <input type="text" id="e-t2" placeholder="Laden…" oninput="update()">
         <label for="e-b2">Tekst</label>
@@ -798,6 +824,12 @@ textarea { resize: vertical; min-height: 68px; }
       </div>
       <div class="news-block">
         <div class="block-label">Bericht 3 &mdash; vandaag / verwacht <span class="taal-tag" id="taal-3"></span></div>
+        <div class="bron-knoppen">Ververs uit:
+          <button class="bron-knop" onclick="verversArtikel(3,'jeugdjournaal.nl',this)">Jeugdjournaal</button>
+          <button class="bron-knop" onclick="verversArtikel(3,'nos.nl',this)">NOS</button>
+          <button class="bron-knop" onclick="verversArtikel(3,'rtlnieuws.nl',this)">RTL</button>
+          <span class="bron-status" id="bron-status-3"></span>
+        </div>
         <label for="e-t3">Titel</label>
         <input type="text" id="e-t3" placeholder="Laden…" oninput="update()">
         <label for="e-b3">Tekst</label>
@@ -1570,9 +1602,10 @@ function fetchTimeout(url, ms) {
 }
 
 // ===================== JEUGDJOURNAAL (primaire bron) =====================
-// Route: r.jina.ai leest de homepage (artikel-URLs), corsproxy.io haalt per
-// artikel de tekst op. Beide zijn gratis diensten zonder sleutel — als een
-// van de twee wegvalt, valt de krant terug op NOS/RTL.
+// r.jina.ai leest zowel de homepage (voor de artikel-URLs) als elke
+// artikelpagina (als schone markdown). Gratis, geen sleutel. Valt de dienst
+// weg, dan schakelt de krant over op NOS/RTL. (corsproxy.io gaf in aug 2026
+// ineens 401; daarom nu alles via jina.)
 var JJ_SKIP = /(ochtendjournaal|avondjournaal|uitzending|journaal-van-vandaag|nieuwswekker|jeugdjournaal-top)/;
 
 function slugNaarTekst(url) {
@@ -1608,69 +1641,17 @@ async function jjZoekUrls() {
 }
 
 async function loadJeugdjournaal() {
-  // Stap 1: artikel-URLs — cache verversen als hij leeg of uitgeput is
-  var onbekend = jjUrlCache.filter(function(u) { return !jjGetoond[u]; });
-  if (onbekend.length < 3) {
-    jjUrlCache = await jjZoekUrls();
-    onbekend = jjUrlCache.filter(function(u) { return !jjGetoond[u]; });
-    // Alles al eens getoond? Begin opnieuw met roteren.
-    if (onbekend.length < 3) { jjGetoond = {}; onbekend = jjUrlCache.slice(); }
+  // Haalt de 3 berichten één voor één op (sequentieel). allorigins struikelt
+  // over te veel gelijktijdige aanvragen; per stuk werkt betrouwbaar. Snelheid
+  // maakt niet uit. haalEenJeugdjournaal roteert door verse artikelen en gooit
+  // een fout als het niet lukt → dan valt de krant terug op NOS/RTL.
+  for (var idx = 0; idx < 3; idx++) {
+    var a = await haalEenJeugdjournaal();
+    var budget = (idx === 0) ? KOP_BUDGET : KOP_BUDGET_KATERN;
+    document.getElementById('e-t' + (idx + 1)).value = await slimVerkortKop(a.title, budget);
+    document.getElementById('e-b' + (idx + 1)).value = await slimVerkortTekst(a.bron);
+    BRONNEN[idx + 1] = 'jeugdjournaal.nl';
   }
-  if (onbekend.length < 3) throw new Error('te weinig artikelen gevonden');
-
-  // Stap 2: eerste 5 ongetoonde kandidaten parallel ophalen, 3 beste gebruiken
-  var urls = onbekend;
-  var fetched = await Promise.allSettled(urls.slice(0, 5).map(async function(url) {
-    var r2 = await fetchTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), 15000);
-    if (!r2.ok) throw new Error('HTTP ' + r2.status);
-    var doc = new DOMParser().parseFromString(await r2.text(), 'text/html');
-    var h1 = doc.querySelector('h1');
-    var timeEl = doc.querySelector('time[datetime]');
-    var paras = Array.prototype.slice.call(doc.querySelectorAll('p'))
-      .map(function(p) { return p.textContent.replace(/\s+/g, ' ').trim(); })
-      .filter(function(t) { return t.length > 40; });
-    if (!h1 || paras.length === 0) throw new Error('leeg artikel');
-    return {
-      url: url,
-      title: h1.textContent.trim(),
-      bron: paras.slice(0, 4).join(' '),  // volledige brontekst; inkorten volgt na selectie
-      datum: timeEl ? timeEl.getAttribute('datetime').slice(0, 10) : null
-    };
-  }));
-
-  var arts = fetched
-    .filter(function(f) { return f.status === 'fulfilled'; })
-    .map(function(f) { return f.value; })
-    .filter(function(a) {
-      var it = { title: a.title, description: a.bron };
-      return !isSport(it) && isKindgeschikt(it);
-    });
-  if (arts.length < 3) throw new Error('te weinig artikelen opgehaald');
-
-  // Stap 3: verdelen — bericht 1+2 het liefst van gisteren, bericht 3 van vandaag
-  var vandaag = new Date().toISOString().slice(0, 10);
-  var gister  = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  var vanGister  = arts.filter(function(a) { return a.datum === gister; });
-  var vanVandaag = arts.filter(function(a) { return a.datum === vandaag; });
-
-  function pak(pool, gebruikt) {
-    for (var i = 0; i < pool.length; i++) if (gebruikt.indexOf(pool[i]) === -1) return pool[i];
-    return null;
-  }
-  var b1 = pak(vanGister, []) || arts[arts.length - 1];
-  var b2 = pak(vanGister, [b1]) || pak(arts, [b1]);
-  var b3 = pak(vanVandaag, [b1, b2]) || pak(arts, [b1, b2]);
-  if (!b1 || !b2 || !b3) throw new Error('te weinig unieke artikelen');
-
-  await Promise.all([b1, b2, b3].map(async function(a, idx) {
-    var kopBudget = (idx === 0) ? KOP_BUDGET : KOP_BUDGET_KATERN;
-    var kop   = await slimVerkortKop(a.title, kopBudget);
-    var tekst = await slimVerkortTekst(a.bron);
-    document.getElementById('e-t' + (idx + 1)).value = kop;
-    document.getElementById('e-b' + (idx + 1)).value = tekst;
-    BRONNEN[idx + 1] = domeinVanUrl(a.url) || 'jeugdjournaal.nl';
-    jjGetoond[a.url] = true;
-  }));
   update();
 }
 
@@ -1694,6 +1675,86 @@ function cleanText(html) {
   var t = (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
   t = t.replace(/\s*(Lees meer|Bekijk|Meer op|Bron)\s+op\s+\S+/gi, '').trim();
   return t;  // inkorten gebeurt later, op zinsgrens of via AI
+}
+
+// ===================== PER-BERICHT VERVERSEN (bron kiezen) =====================
+// Haalt de gefilterde items van één RSS-bron op (NOS of RTL) via rss2json.
+async function haalFeedItems(bron) {
+  var feed = (bron === 'nos.nl') ? 'https://feeds.nos.nl/nosnieuwsalgemeen'
+                                 : 'https://www.rtlnieuws.nl/rss.xml';
+  var r = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feed));
+  var j = await r.json();
+  if (!j || j.status !== 'ok' || !j.items) throw new Error('feed leeg');
+  return j.items.filter(function(it) {
+    var x = { title: it.title, description: it.description || it.content || '' };
+    return !isSport(x) && isKindgeschikt(x);
+  });
+}
+
+// Haalt één vers (nog niet getoond) Jeugdjournaal-artikel op.
+async function haalEenJeugdjournaal() {
+  var onbekend = jjUrlCache.filter(function(u) { return !jjGetoond[u]; });
+  if (onbekend.length < 1) {
+    jjUrlCache = await jjZoekUrls();
+    onbekend = jjUrlCache.filter(function(u) { return !jjGetoond[u]; });
+    if (onbekend.length < 1) { jjGetoond = {}; onbekend = jjUrlCache.slice(); }
+  }
+  for (var i = 0; i < Math.min(6, onbekend.length); i++) {
+    var url = onbekend[i];
+    try {
+      // r.jina.ai leest de artikelpagina als lichte, schone markdown
+      // (title + tekst). Sneller en betrouwbaarder dan een volledige-HTML-proxy.
+      var r2 = await fetchTimeout('https://r.jina.ai/' + url, 20000);
+      jjGetoond[url] = true;
+      if (!r2.ok) continue;
+      var md = await r2.text();
+      var titelM = md.match(/^Title:\s*(.+)$/m);
+      var titel = titelM ? titelM[1].replace(/\s*[-–]\s*(NOS\s+)?Jeugdjournaal\s*$/i, '').trim() : '';
+      var ci = md.indexOf('Markdown Content:');
+      var body = (ci >= 0 ? md.slice(ci + 'Markdown Content:'.length) : md)
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')     // afbeeldingen weg
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')    // links → alleen tekst
+        .replace(/^#+\s*/gm, '')                    // kopjes-markering weg
+        .replace(/[*_`>]/g, '')
+        .replace(/\s+/g, ' ').trim();
+      if (!titel || body.length < 60) continue;
+      var art = { title: titel, bron: body.slice(0, 600) };
+      if (isSport({ title: art.title, description: art.bron }) || !isKindgeschikt({ title: art.title, description: art.bron })) continue;
+      return art;
+    } catch(e) { jjGetoond[url] = true; }
+  }
+  throw new Error('geen Jeugdjournaal-artikel');
+}
+
+// Ververst één bericht (slot 1/2/3) met een vers artikel uit de gekozen bron.
+async function verversArtikel(slot, bron, btn) {
+  var knoppen = btn.parentNode.querySelectorAll('.bron-knop');
+  var status  = document.getElementById('bron-status-' + slot);
+  knoppen.forEach(function(k) { k.disabled = true; });
+  status.textContent = 'laden…';
+  try {
+    var kop, tekst;
+    if (bron === 'jeugdjournaal.nl') {
+      var a = await haalEenJeugdjournaal();
+      kop = a.title; tekst = a.bron;
+    } else {
+      var items = await haalFeedItems(bron);
+      var kandidaat = items.find(function(it) { return !nosrtlGetoond[it.title]; }) || items[0];
+      if (!kandidaat) throw new Error('geen artikel');
+      nosrtlGetoond[kandidaat.title] = true;
+      kop = kandidaat.title; tekst = cleanText(kandidaat.description);
+    }
+    var budget = (slot === 1) ? KOP_BUDGET : KOP_BUDGET_KATERN;
+    document.getElementById('e-t' + slot).value = await slimVerkortKop(kop, budget);
+    document.getElementById('e-b' + slot).value = await slimVerkortTekst(tekst);
+    BRONNEN[slot] = bron;
+    update();
+    status.textContent = '✓ ' + bron;
+  } catch(e) {
+    status.textContent = '⚠️ niet gelukt';
+  } finally {
+    knoppen.forEach(function(k) { k.disabled = false; });
+  }
 }
 
 async function loadNieuws() {
