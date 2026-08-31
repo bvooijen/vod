@@ -1669,11 +1669,35 @@ async function loadNieuwsAuto() {
 // ===================== NEWS NOS/RTL (reservebron) =====================
 var nosrtlGetoond = {};
 
+// Haalt een eventuele herhaalde titel én een datum/tijd-aanhef ("vandaag, 12:17",
+// "gisteren, 9:30", "maandag, 14:05", "17 augustus, 8:00") van vóór de tekst weg.
+// Sommige bronnen zetten de kop en het tijdstip als eerste in de body — dat mag
+// niet in het artikel terechtkomen.
+var PZ_DAGEN_RE = 'vandaag|gisteren|eergisteren|zojuist|maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag';
+function stripTijd(t) {
+  // Optioneel dagwoord of "17 augustus", gevolgd door een tijd zoals 12:17 / 8.00
+  var re = new RegExp('^\\s*(?:(?:' + PZ_DAGEN_RE + ')|\\d{1,2}\\s+[a-zé]+)?\\s*,?\\s*\\d{1,2}[:.]\\d{2}\\s*(?:uur)?\\s*[·|\\-–—]?\\s*', 'i');
+  return t.replace(re, '').replace(/^[\s.,:;·|–—-]+/, '').trim();
+}
+function stripAanhef(tekst, titel) {
+  var t = (tekst || '').trim();
+  function stripTitel() {
+    if (titel && titel.length > 4 && t.slice(0, titel.length).toLowerCase() === titel.toLowerCase()) {
+      t = t.slice(titel.length).replace(/^[\s.,:;·|–—-]+/, '').trim();
+    }
+  }
+  stripTitel();          // titel staat meestal vooraan
+  t = stripTijd(t);      // dan de datum/tijd
+  stripTitel();          // en soms staat de titel ná het tijdstip
+  return t;
+}
+
 function cleanText(html) {
   var tmp = document.createElement('div');
   tmp.innerHTML = html;
   var t = (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
   t = t.replace(/\s*(Lees meer|Bekijk|Meer op|Bron)\s+op\s+\S+/gi, '').trim();
+  t = stripTijd(t);      // ook NOS/RTL: eventueel tijdstip vooraan weg
   return t;  // inkorten gebeurt later, op zinsgrens of via AI
 }
 
@@ -1717,6 +1741,7 @@ async function haalEenJeugdjournaal() {
         .replace(/^#+\s*/gm, '')                    // kopjes-markering weg
         .replace(/[*_`>]/g, '')
         .replace(/\s+/g, ' ').trim();
+      body = stripAanhef(body, titel);
       if (!titel || body.length < 60) continue;
       var art = { title: titel, bron: body.slice(0, 600) };
       if (isSport({ title: art.title, description: art.bron }) || !isKindgeschikt({ title: art.title, description: art.bron })) continue;
@@ -1742,7 +1767,7 @@ async function verversArtikel(slot, bron, btn) {
       var kandidaat = items.find(function(it) { return !nosrtlGetoond[it.title]; }) || items[0];
       if (!kandidaat) throw new Error('geen artikel');
       nosrtlGetoond[kandidaat.title] = true;
-      kop = kandidaat.title; tekst = cleanText(kandidaat.description);
+      kop = kandidaat.title; tekst = stripAanhef(cleanText(kandidaat.description), kandidaat.title);
     }
     var budget = (slot === 1) ? KOP_BUDGET : KOP_BUDGET_KATERN;
     document.getElementById('e-t' + slot).value = await slimVerkortKop(kop, budget);
@@ -1821,7 +1846,7 @@ async function loadNieuws() {
     if (!item) return;
     var kopBudget = (idx === 0) ? KOP_BUDGET : KOP_BUDGET_KATERN;
     var kop   = await slimVerkortKop(item.title || '', kopBudget);
-    var tekst = await slimVerkortTekst(cleanText(item.description));
+    var tekst = await slimVerkortTekst(stripAanhef(cleanText(item.description), item.title));
     document.getElementById('e-t' + (idx + 1)).value = kop;
     document.getElementById('e-b' + (idx + 1)).value = tekst;
     BRONNEN[idx + 1] = (item.source === 'NOS') ? 'nos.nl' : 'rtlnieuws.nl';
@@ -2095,7 +2120,11 @@ var PZ_VORMEN = [
         p.push([50 + x * 2.5, 44 - y * 2.5]);
       } return p;
     })() },
-  { naam: 'huis', punten: [[28, 86], [28, 48], [16, 48], [50, 20], [84, 48], [72, 48], [72, 86]] }
+  { naam: 'huis', punten: [[28, 86], [28, 48], [16, 48], [50, 20], [84, 48], [72, 48], [72, 86]] },
+  { naam: 'boom', punten: [[38, 88], [38, 62], [22, 62], [50, 20], [78, 62], [62, 62], [62, 88]] },
+  { naam: 'vis',  punten: [[85, 50], [62, 33], [34, 38], [12, 26], [12, 74], [34, 62], [62, 67]] },
+  { naam: 'pijl', punten: [[10, 40], [55, 40], [55, 25], [90, 50], [55, 75], [55, 60], [10, 60]] },
+  { naam: 'maan', punten: [[50, 14], [24, 26], [16, 50], [24, 74], [50, 86], [40, 64], [36, 50], [40, 36]] }
 ];
 
 function pzVerbindPunten(rng) {
@@ -2130,6 +2159,16 @@ var PZ_TELSOORTEN = [
     } },
   { naam: 'appels', teken: function() {
       return '<g><circle cx="5" cy="6" r="3.3"/><rect x="4.6" y="1.4" width="0.8" height="2.2"/></g>';
+    } },
+  { naam: 'bloemen', teken: function() {
+      return '<g><circle cx="5" cy="2.4" r="1.5"/><circle cx="7.6" cy="5" r="1.5"/><circle cx="5" cy="7.6" r="1.5"/>'
+           + '<circle cx="2.4" cy="5" r="1.5"/><circle cx="5" cy="5" r="1.6"/></g>';
+    } },
+  { naam: 'ballonnen', teken: function() {
+      return '<g><ellipse cx="5" cy="4" rx="3" ry="3.6"/><rect x="4.8" y="7.4" width="0.4" height="2.4"/></g>';
+    } },
+  { naam: 'boompjes', teken: function() {
+      return '<g><rect x="4.4" y="6" width="1.2" height="3.4"/><path d="M5 0.8 L8.4 6.4 L1.6 6.4 Z"/></g>';
     } }
 ];
 
@@ -2159,7 +2198,9 @@ function pzTellen(rng) {
 var PZ_FIGUREN = {
   cirkel:   '<circle cx="5" cy="5" r="4"/>',
   driehoek: '<path d="M5 1 L9 9 L1 9 Z"/>',
-  vierkant: '<rect x="1.3" y="1.3" width="7.4" height="7.4"/>'
+  vierkant: '<rect x="1.3" y="1.3" width="7.4" height="7.4"/>',
+  ster:     '<path d="M5 0.5 L6.1 3.7 L9.5 3.7 L6.7 5.8 L7.8 9 L5 7 L2.2 9 L3.3 5.8 L0.5 3.7 L3.9 3.7 Z"/>',
+  hart:     '<path d="M5 9 C1 6 1 2.5 3 2 C4.2 1.6 5 2.6 5 3.5 C5 2.6 5.8 1.6 7 2 C9 2.5 9 6 5 9 Z"/>'
 };
 function pzPatroon(rng) {
   var namen = Object.keys(PZ_FIGUREN);
@@ -2199,7 +2240,61 @@ function pzPatroon(rng) {
   return { opdracht: 'Wat komt hierna? Zet een kringetje om het goede plaatje.', svg: s };
 }
 
-var PZ_TYPES = [pzVerbindPunten, pzTellen, pzPatroon];
+// --- Type 4: welke is anders? ---
+function pzAnders(rng) {
+  var namen = Object.keys(PZ_FIGUREN);
+  var a = namen[Math.floor(rng() * namen.length)];
+  var b; do { b = namen[Math.floor(rng() * namen.length)]; } while (b === a);
+  var n = 6, oddPos = Math.floor(rng() * n);
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg" fill="' + PZ_KLEUR + '" stroke="none">';
+  for (var c = 0; c < n; c++) {
+    var cx = 9 + c * 15, fig = (c === oddPos) ? b : a;
+    s += '<g transform="translate(' + cx + ',18) scale(1.3)">' + PZ_FIGUREN[fig] + '</g>';
+  }
+  // Antwoord subtiel in de hoek (plaats van links af geteld).
+  s += '<text x="99" y="60" font-size="4" text-anchor="end" fill="#c3d0cd">' + (oddPos + 1) + '</text>';
+  s += '</svg>';
+  return { opdracht: 'Eén plaatje is anders dan de rest. Zet er een kringetje omheen!', svg: s };
+}
+
+// --- Type 5: welke letter mist er? ---
+var PZ_WOORDEN = [
+  { woord: 'KAT',   hint: 'een dier dat miauwt' },
+  { woord: 'HOND',  hint: 'een dier dat blaft' },
+  { woord: 'BOOM',  hint: 'die is groen en heeft bladeren' },
+  { woord: 'MAAN',  hint: 'die zie je in de nacht aan de hemel' },
+  { woord: 'VIS',   hint: 'die zwemt in het water' },
+  { woord: 'ZON',   hint: 'die schijnt overdag en maakt het warm' },
+  { woord: 'HUIS',  hint: 'daar woon je in' },
+  { woord: 'BAL',   hint: 'daar kun je mee voetballen' },
+  { woord: 'BOOT',  hint: 'die vaart op het water' },
+  { woord: 'KAAS',  hint: 'geel en van melk, muizen zijn er dol op' },
+  { woord: 'APPEL', hint: 'een rode of groene vrucht' },
+  { woord: 'STER',  hint: 'die twinkelt in de nacht' },
+  { woord: 'BLOEM', hint: 'die groeit in de tuin en ruikt lekker' },
+  { woord: 'TREIN', hint: 'die rijdt over de rails' }
+];
+function pzLetterWoord(rng) {
+  var w = PZ_WOORDEN[Math.floor(rng() * PZ_WOORDEN.length)];
+  var woord = w.woord, mi = Math.floor(rng() * woord.length);
+  var stap = 15, x0 = (100 - woord.length * stap) / 2 + stap / 2;
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg">';
+  for (var i = 0; i < woord.length; i++) {
+    var cx = x0 + i * stap;
+    if (i === mi) {
+      s += '<rect x="' + (cx - 6) + '" y="16" width="12" height="18" rx="1.5" fill="none" stroke="'
+         + PZ_KLEUR + '" stroke-width="1.2" stroke-dasharray="2 1.5"/>';
+    } else {
+      s += '<text x="' + cx + '" y="32" font-size="17" font-weight="800" text-anchor="middle" fill="'
+         + PZ_KLEUR + '">' + woord[i] + '</text>';
+    }
+  }
+  s += '<text x="99" y="60" font-size="4" text-anchor="end" fill="#c3d0cd">' + woord[mi] + '</text>';
+  s += '</svg>';
+  return { opdracht: 'Welke letter mist er? Schrijf hem in het vakje. Tip: ' + w.hint + '.', svg: s };
+}
+
+var PZ_TYPES = [pzVerbindPunten, pzTellen, pzPatroon, pzAnders, pzLetterWoord];
 
 function bouwPuzzel() {
   var forceer = new URLSearchParams(location.search).get('puzzel');
