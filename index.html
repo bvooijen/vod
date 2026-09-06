@@ -1546,10 +1546,40 @@ function setStatus(msg, type) {
 
 // ===================== WEATHER =====================
 // Weer = de VOORSPELLING voor vandaag: de maximumtemperatuur van de dag +
-// een bijpassende beschrijving/icoon. Hoofdbron Open-Meteo (dagvoorspelling,
-// betrouwbaar, geen sleutel); valt terug op de Buienradar-dagvoorspelling.
+// een bijpassende beschrijving/icoon. Hoofdbron RTV Rijnmond (lokaal weerbericht
+// voor het Rijnmondgebied); valt terug op Open-Meteo en dan Buienradar.
 async function loadWeer() {
-  // --- Hoofdbron: Open-Meteo dagvoorspelling ---
+  // --- Hoofdbron: RTV Rijnmond (rijnmond.nl/weer) ---
+  // rijnmond.nl is een Nuxt-app zonder open weer-API en zonder CORS, dus we
+  // lezen de pagina als schone markdown via r.jina.ai (net als het nieuws).
+  try {
+    var rj = await fetchTimeout('https://r.jina.ai/https://www.rijnmond.nl/weer', 15000);
+    if (!rj.ok) throw new Error('Rijnmond HTTP ' + rj.status);
+    var md = await rj.text();
+    // Max-temp van vandaag: de eerste tabelrij van "Komende dagen" heeft de vorm
+    // "23°  11°  0%" (max, min, neerslagkans). De eerste match is vandaag.
+    var tM = md.match(/(-?\d+)\s*°\s+(-?\d+)\s*°\s+\d+\s*%/);
+    // Weertype van vandaag: het eerste weer-icoon /img/<naam>.<hash>.svg
+    // (bijv. half-bewolkt, buien, zonnig) → via mapWeertype naar ons icoon.
+    var iM = md.match(/\/img\/([a-z-]+)\.[a-z0-9]+\.svg/i);
+    if (!tM || !iM) throw new Error('Rijnmond niet te lezen');
+    var maxTr = parseInt(tM[1], 10);
+    var typeR = mapWeertype(iM[1].replace(/-/g, ' '));
+    // Rijnmonds eigen kop (bijv. "HEERLIJK NAZOMERWEER") als beschrijving, netjes
+    // met hoofdletter; te lange koppen vallen terug op een kort, net label.
+    var kopM = md.match(/Weerbericht[\s\S]{0,150}?\*\*([^*]+)\*\*/);
+    var kopR = kopM ? kopM[1].trim() : '';
+    var descR = (kopR && kopR.length <= 24)
+      ? kopR.charAt(0).toUpperCase() + kopR.slice(1).toLowerCase()
+      : (WEERTYPE_LABEL[typeR] || 'Wisselend bewolkt');
+    document.getElementById('e-temp').value     = maxTr;
+    document.getElementById('e-weerdesc').value = descR;
+    document.getElementById('e-weertype').value = typeR;
+    document.getElementById('k-weerbrn').textContent = 'Bron: RTV Rijnmond';
+    update(); return;
+  } catch(e) { /* val terug op Open-Meteo */ }
+
+  // --- Reserve 1: Open-Meteo dagvoorspelling ---
   try {
     var url = 'https://api.open-meteo.com/v1/forecast'
             + '?latitude=51.9225&longitude=4.4792'
@@ -1564,11 +1594,11 @@ async function loadWeer() {
     document.getElementById('e-temp').value     = Math.round(maxT);
     document.getElementById('e-weerdesc').value = wmo.d;
     document.getElementById('e-weertype').value = wmo.t;
-    document.getElementById('k-weerbrn').textContent = 'Bron: Open-Meteo (voorspelling)';
+    document.getElementById('k-weerbrn').textContent = 'Bron: Open-Meteo (reserve)';
     update(); return;
   } catch(e) { /* val terug op Buienradar */ }
 
-  // --- Reserve: Buienradar-dagvoorspelling ---
+  // --- Reserve 2: Buienradar-dagvoorspelling ---
   var r2 = await fetch('https://data.buienradar.nl/2.0/feed/json');
   if (!r2.ok) throw new Error('Buienradar HTTP ' + r2.status);
   var data = await r2.json();
@@ -1584,7 +1614,7 @@ async function loadWeer() {
   // Buienradar-tekst die de smalle weerstrook zou laten overlopen.
   document.getElementById('e-weerdesc').value = WEERTYPE_LABEL[type] || desc;
   document.getElementById('e-weertype').value = type;
-  document.getElementById('k-weerbrn').textContent = 'Bron: Buienradar (voorspelling)';
+  document.getElementById('k-weerbrn').textContent = 'Bron: Buienradar (reserve)';
   update();
 }
 
