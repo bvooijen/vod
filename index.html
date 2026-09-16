@@ -567,7 +567,7 @@ textarea { resize: vertical; min-height: 68px; }
 .mobiel-printbalk { display: none; }
 
 @media screen and (max-width: 820px) {
-  body { font-size: 15px; padding-bottom: 84px; } /* ruimte voor de vaste printbalk */
+  body { font-size: 15px; padding-bottom: 108px; } /* ruimte voor de vaste printbalk */
 
   #editor { margin: 10px 8px 0; padding: 16px 14px; border-radius: 14px; }
   #editor-header { align-items: flex-start; }
@@ -589,7 +589,9 @@ textarea { resize: vertical; min-height: 68px; }
   /* Altijd bereikbare printknop onderaan het scherm */
   .mobiel-printbalk {
     display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    /* Extra ruimte onderaan: iOS 26/27 legt een zwevende Safari-balk over de
+       pagina heen, die anders de onderkant van de knop afdekt. */
+    padding: 8px 12px calc(26px + env(safe-area-inset-bottom, 0px));
     background: rgba(240,244,246,0.96);
     box-shadow: 0 -2px 14px rgba(0,0,0,0.16);
   }
@@ -748,7 +750,7 @@ textarea { resize: vertical; min-height: 68px; }
     <h2>Het VOD &mdash; Redactie</h2>
     <div class="header-btns">
       <button class="reload-btn" id="reload-btn" onclick="autoLoad()">Ververs alles</button>
-      <button class="print-btn" onclick="window.print()">Drukken!</button>
+      <button class="print-btn" onclick="window.drukAf ? drukAf() : window.print()">Drukken!</button>
     </div>
   </div>
 
@@ -1062,7 +1064,7 @@ textarea { resize: vertical; min-height: 68px; }
 
 <!-- Vaste printknop onderaan (alleen op de telefoon zichtbaar) -->
 <div class="mobiel-printbalk">
-  <button onclick="window.print()">&#128424;&#65039; Druk de krant af</button>
+  <button onclick="window.drukAf ? drukAf() : window.print()">&#128424;&#65039; Druk de krant af</button>
 </div>
 
 <script>
@@ -2503,9 +2505,36 @@ function meetPrintHoogte() {
   return h;
 }
 
-window.addEventListener('beforeprint', function() {
+// Zet de compacte printstand aan als de krant niet op 1 A4 past.
+function bepaalPrintStand() {
   document.body.classList.remove('print-compact');
   if (meetPrintHoogte() > 1070) document.body.classList.add('print-compact');
+}
+
+// BELANGRIJK (iOS 26/27): de pascontrole draait VOORAF, niet meer tijdens
+// 'beforeprint'. Safari bouwt de print-preview op zodra print() wordt
+// aangeroepen; meetPrintHoogte() injecteert dan een extra stylesheet én zet
+// inline CSS-zoom op #krant — die inline zoom overschreef op dat moment de
+// 'zoom: 0.84' uit de printstijl. Sinds Safari 27 (dat CSS-zoom grondig
+// herzag) verscheen de printinterface daardoor niet meer. Nu is alles klaar
+// vóór print() en blijft de printfase zelf onaangeraakt.
+var pasControleTijd = 0;
+function drukAf() {
+  // Bewust synchroon: de print()-aanroep moet binnen het gebruikersgebaar
+  // blijven, anders blokkeert iOS Safari hem.
+  try {
+    bepaalPrintStand();
+    pasControleTijd = Date.now();
+  } catch (e) {
+    // Liever printen zonder pascontrole dan helemaal niet kunnen printen.
+  }
+  window.print();
+}
+
+// Vangnet voor printen via Safari's deelmenu; dan is drukAf() niet gelopen.
+window.addEventListener('beforeprint', function() {
+  if (Date.now() - pasControleTijd < 4000) return; // de knop deed het al
+  try { bepaalPrintStand(); } catch (e) { /* nooit het printen blokkeren */ }
 });
 window.addEventListener('afterprint', function() {
   document.body.classList.remove('print-compact');
