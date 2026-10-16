@@ -6,7 +6,7 @@
 <title>Het VOD – Redactie</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Andika:wght@400;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -1629,10 +1629,12 @@ var WEERTYPE_LABEL = {
 };
 
 // ===================== FETCH HELPER =====================
-function fetchTimeout(url, ms) {
+function fetchTimeout(url, ms, headers) {
   var ctl = new AbortController();
   var t = setTimeout(function() { ctl.abort(); }, ms || 15000);
-  return fetch(url, { signal: ctl.signal }).finally(function() { clearTimeout(t); });
+  var opts = { signal: ctl.signal };
+  if (headers) opts.headers = headers;
+  return fetch(url, opts).finally(function() { clearTimeout(t); });
 }
 
 // ===================== JEUGDJOURNAAL (primaire bron) =====================
@@ -1723,7 +1725,11 @@ function stripAanhef(tekst, titel) {
   // "7:54 <titel> vandaag, 10:01 <tekst>" — duur, titel en tijd door elkaar.
   for (var ronde = 0; ronde < 5; ronde++) {
     var voor = t;
-    if (titel && titel.length > 4 && t.slice(0, titel.length).toLowerCase() === titel.toLowerCase()) {
+    // Alleen weghalen als de titel los staat: daarna moet een nieuwe zin
+    // beginnen. Anders is het de eerste zin zelf die toevallig hetzelfde begint
+    // ("...is opnieuw wereldkampioen geworden!") en knippen we die doormidden.
+    if (titel && titel.length > 4 && t.slice(0, titel.length).toLowerCase() === titel.toLowerCase()
+        && /^[\s.,:;·|–—-]*(?:[A-ZÀ-Ý0-9"'‘“(]|$)/.test(t.slice(titel.length))) {
       t = t.slice(titel.length).replace(/^[\s.,:;·|–—-]+/, '').trim();
     }
     t = stripTijd(t);
@@ -1740,24 +1746,58 @@ var JJ_TIJDREGEL_RE = new RegExp('^(?:(?:' + PZ_DAGEN_RE + ')|\\d{1,2}\\s+[a-zé
 function jjSchoonTekst(md, titel) {
   var ci = md.indexOf('Markdown Content:');
   var regels = (ci >= 0 ? md.slice(ci + 'Markdown Content:'.length) : md).split('\n');
+  // Alles vóór de hoofdkop (# Titel) is site-rommel: menu, deelknoppen met
+  // tellers, fotobijschrift. Begin dan pas ná die kop — mits er vóór de kop
+  // nog geen echte lopende tekst stond (dan is het geen paginakop).
+  for (var h = 0; h < regels.length; h++) {
+    var rh = regels[h].trim();
+    if (/^#\s/.test(rh)) { regels = regels.slice(h + 1); break; }
+    if (rh.length > 80 && !/^[*-]\s+\[|^!\[/.test(rh)) break;   // proza gevonden: niet knippen
+  }
   var titelKlein = (titel || '').toLowerCase().trim();
   var uit = [];
   for (var i = 0; i < regels.length; i++) {
     var r = regels[i].trim();
     if (!r) continue;
-    if (/^[*-]\s+\[/.test(r)) break;            // lijst met andere artikelen = einde stuk
+    var wasBeeld = /^!\[/.test(r);
+    if (/^[*-]\s+\[\]\(/.test(r)) continue;      // icoon-links zonder tekst (sociale media in het menu)
+    // Lijst met andere artikelen = einde van het stuk. Maar alleen als het stuk
+    // al begonnen is: vóór de tekst staat soms het menu, ook als lijst.
+    if (/^[*-]\s+\[/.test(r)) { if (uit.length) break; else continue; }
     if (/^#/.test(r)) continue;                  // tussenkopjes
     r = r.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')  // afbeeldingen
          .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // links → tekst
          .replace(/[*_`>]/g, '').replace(/\s+/g, ' ').trim();
     if (!r) continue;
+    if (wasBeeld && r.length < 50 && !/[.!?]$/.test(r)) continue; // fotobijschrift/-bron
+    if (/^\d+$/.test(r) || /^(gekopieerd!?|kopieer link|delen?)$/i.test(r)) continue; // deelknoppen
     if (JJ_TIJDREGEL_RE.test(r)) continue;       // "vandaag, 12:47" of videoduur "7:54"
     if (/^bijgewerkt\b/i.test(r)) continue;
     if (titelKlein && r.toLowerCase() === titelKlein) continue;
+    if (JJ_MENU_RE.test(r) || /^menu\b/i.test(r)) continue; // navigatie van de site
     if (/reacties|whatsapp|stuur je vraag|heb jij een vraag|laat het (ons )?weten|stelling/i.test(r)) continue;
     uit.push(r);
   }
   return stripAanhef(uit.join(' '), titel);
+}
+
+// Herkent de site-navigatie die jina soms meeneemt i.p.v. (of vóór) het artikel.
+var JJ_MENU_RE = /zoek in jeugdjournaal|menu en zoeken|ga naar de inhoud/i;
+
+// Haalt één artikelpagina op als markdown. Eerst alleen het <main>-blok
+// (X-Target-Selector), dan komt het menu niet mee. Lukt dat niet, of zit er
+// tóch menu-tekst in, dan de hele pagina: jjSchoonTekst slaat het menu over.
+async function jjHaalArtikel(url) {
+  try {
+    var r = await fetchTimeout('https://r.jina.ai/' + url, 20000, { 'X-Target-Selector': 'main' });
+    if (r.ok) {
+      var md = await r.text();
+      var ci = md.indexOf('Markdown Content:');
+      if (ci >= 0 && !JJ_MENU_RE.test(md.slice(ci))) return md;
+    }
+  } catch (e) { /* door naar de tweede poging */ }
+  var r2 = await fetchTimeout('https://r.jina.ai/' + url, 20000);
+  return r2.ok ? await r2.text() : null;
 }
 
 function cleanText(html) {
@@ -1795,15 +1835,15 @@ async function haalEenJeugdjournaal() {
     var url = onbekend[i];
     try {
       // r.jina.ai leest de artikelpagina als lichte, schone markdown
-      // (title + tekst). Sneller en betrouwbaarder dan een volledige-HTML-proxy.
-      var r2 = await fetchTimeout('https://r.jina.ai/' + url, 20000);
+      // (title + tekst); jjHaalArtikel houdt het site-menu buiten de deur.
+      var md = await jjHaalArtikel(url);
       jjGetoond[url] = true;
-      if (!r2.ok) continue;
-      var md = await r2.text();
+      if (!md) continue;
       var titelM = md.match(/^Title:\s*(.+)$/m);
       var titel = titelM ? titelM[1].replace(/\s*[-–]\s*(NOS\s+)?Jeugdjournaal\s*$/i, '').trim() : '';
       var body = jjSchoonTekst(md, titel);
       if (!titel || body.length < 60) continue;
+      if (JJ_MENU_RE.test(body)) continue;       // nog steeds menu: volgend artikel
       if (/^kijk (hier|naar)/i.test(body)) continue; // video-uitzending, niets aan op papier
       var art = { title: titel, bron: body.slice(0, 600) };
       if (isSport({ title: art.title, description: art.bron }) || !isKindgeschikt({ title: art.title, description: art.bron })) continue;
@@ -2148,6 +2188,9 @@ function loadMop() {
 // geen internet nodig, dus werkt ook in de noodkrant. Getekend als SVG in één
 // donkere kleur, zodat het op elke printer (ook zwart-wit) goed afdrukt.
 var PZ_KLEUR = '#2b3440';
+// Taalpuzzels: altijd kleine letters, in Andika — gemaakt voor beginnende
+// lezers ('a' en 'g' met één rondje, zoals kinderen in groep 3 ze schrijven).
+var PZ_TAAL = ' font-family="Andika, Nunito, sans-serif" ';
 
 function pzDagnummer() {
   var d = new Date();
@@ -2350,7 +2393,7 @@ var PZ_WOORDEN = [
 ];
 function pzLetterWoord(rng) {
   var w = PZ_WOORDEN[Math.floor(rng() * PZ_WOORDEN.length)];
-  var woord = w.woord, mi = Math.floor(rng() * woord.length);
+  var woord = w.woord.toLowerCase(), mi = Math.floor(rng() * woord.length);
   var stap = 15, x0 = (100 - woord.length * stap) / 2 + stap / 2;
   var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg">';
   for (var i = 0; i < woord.length; i++) {
@@ -2359,7 +2402,7 @@ function pzLetterWoord(rng) {
       s += '<rect x="' + (cx - 6) + '" y="16" width="12" height="18" rx="1.5" fill="none" stroke="'
          + PZ_KLEUR + '" stroke-width="1.2" stroke-dasharray="2 1.5"/>';
     } else {
-      s += '<text x="' + cx + '" y="32" font-size="17" font-weight="800" text-anchor="middle" fill="'
+      s += '<text x="' + cx + '" y="32" font-size="19" font-weight="700" text-anchor="middle"' + PZ_TAAL + 'fill="'
          + PZ_KLEUR + '">' + woord[i] + '</text>';
     }
   }
@@ -2422,15 +2465,15 @@ function pzWoordSchrijven(rng) {
   var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg">';
   for (var r = 0; r < 2; r++) {
     var soort = soorten.splice(Math.floor(rng() * soorten.length), 1)[0];
-    var woord = PZ_PLAATJESWOORD[soort.naam], y = 4 + r * 30;
+    var woord = PZ_PLAATJESWOORD[soort.naam].toLowerCase(), y = 4 + r * 30;
     s += '<g transform="translate(4,' + y + ') scale(2.3)" fill="' + PZ_KLEUR + '">' + soort.teken() + '</g>';
     for (var k = 0; k < woord.length; k++) {
       var bx = 32 + k * 11;
       // Eerste letter staat er al als steuntje; de rest schrijft het kind zelf.
       s += '<line x1="' + bx + '" y1="' + (y + 21) + '" x2="' + (bx + 8.5) + '" y2="' + (y + 21)
          + '" stroke="' + PZ_KLEUR + '" stroke-width="1"/>';
-      if (k === 0) s += '<text x="' + (bx + 4.25) + '" y="' + (y + 19) + '" font-size="12" font-weight="800" '
-                     + 'text-anchor="middle" fill="' + PZ_KLEUR + '">' + woord[0] + '</text>';
+      if (k === 0) s += '<text x="' + (bx + 4.25) + '" y="' + (y + 19) + '" font-size="14" font-weight="700" '
+                     + 'text-anchor="middle"' + PZ_TAAL + 'fill="' + PZ_KLEUR + '">' + woord[0] + '</text>';
     }
   }
   s += '</svg>';
@@ -2462,31 +2505,215 @@ function pzRijm(rng) {
   for (var i = keuzes.length - 1; i > 0; i--) {     // schudden
     var j = Math.floor(rng() * (i + 1)), t = keuzes[i]; keuzes[i] = keuzes[j]; keuzes[j] = t;
   }
+  // Groot woord links, de drie keuzes onder elkaar rechts (Andika is breed;
+  // naast elkaar zouden ze tegen elkaar aan lopen).
   var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg">'
-        + '<text x="50" y="18" font-size="15" font-weight="800" text-anchor="middle" fill="' + PZ_KLEUR + '">'
-        + rm.w + '</text>';
+        + '<text x="25" y="37" font-size="16" font-weight="700" text-anchor="middle"' + PZ_TAAL + 'fill="' + PZ_KLEUR + '">'
+        + rm.w.toLowerCase() + '</text>'
+        + '<text x="52" y="36" font-size="9" font-weight="800" text-anchor="middle" fill="' + PZ_KLEUR + '">→</text>';
   keuzes.forEach(function(k, n) {
-    var cx = 18 + n * 32;
-    s += '<rect x="' + (cx - 14) + '" y="31" width="28" height="15" rx="7" fill="none" stroke="'
-       + PZ_KLEUR + '" stroke-width="1"/>'
-       + '<text x="' + cx + '" y="42" font-size="8.5" font-weight="800" text-anchor="middle" fill="'
-       + PZ_KLEUR + '">' + k + '</text>';
+    var cy = 11 + n * 19;
+    s += '<rect x="58" y="' + (cy - 8) + '" width="40" height="16" rx="8" fill="none" stroke="'
+       + PZ_KLEUR + '" stroke-width="0.9"/>'
+       + '<text x="78" y="' + (cy + 4) + '" font-size="11" font-weight="700" text-anchor="middle"' + PZ_TAAL + 'fill="'
+       + PZ_KLEUR + '">' + k.toLowerCase() + '</text>';
   });
-  s += '<text x="99" y="60" font-size="4" text-anchor="end" fill="#c3d0cd">' + rm.r + '</text></svg>';
+  s += '<text x="99" y="60" font-size="4" text-anchor="end" fill="#c3d0cd">' + rm.r.toLowerCase() + '</text></svg>';
   return { opdracht: 'Welk woord rijmt op het grote woord? Zet er een kringetje om.', svg: s };
 }
 
-// Alle types op vaste volgorde — voor ?puzzel=0..8 (testen/forceren):
-// 0 verbind de punten · 1 tellen · 2 patroon · 3 anders · 4 letter mist
-// 5 sommen · 6 getallenrij · 7 woord schrijven · 8 rijmen
-var PZ_TYPES = [pzVerbindPunten, pzTellen, pzPatroon, pzAnders, pzLetterWoord,
-                pzSommen, pzGetalrij, pzWoordSchrijven, pzRijm];
+// ---------- Groep 3: hulpjes ----------
+function pzSchud(lijst, rng) {
+  for (var i = lijst.length - 1; i > 0; i--) {
+    var j = Math.floor(rng() * (i + 1)), t = lijst[i]; lijst[i] = lijst[j]; lijst[j] = t;
+  }
+  return lijst;
+}
+// Plaatjes met hun woord (kleine letters) — hergebruikt de teken-icoontjes.
+function pzPlaatjes() {
+  return PZ_TELSOORTEN.map(function(s) {
+    return { woord: PZ_PLAATJESWOORD[s.naam].toLowerCase(), teken: s.teken, naam: s.naam };
+  });
+}
+var PZ_STREEP = ' fill="none" stroke="' + PZ_KLEUR + '" stroke-width="1.1" stroke-dasharray="2 1.5" ';
+function pzGetal(x, y, n, grootte) {
+  return '<text x="' + x + '" y="' + y + '" font-size="' + (grootte || 10) + '" font-weight="800" '
+       + 'text-anchor="middle" fill="' + PZ_KLEUR + '" stroke="none">' + n + '</text>';
+}
+function pzAntwoord(tekst) {
+  return '<text x="99" y="61" font-size="4" text-anchor="end" fill="#c3d0cd" stroke="none">' + tekst + '</text>';
+}
 
-// Dagrooster: lezen, schrijven en rekenen krijgen voorrang (11 van de 14
-// dagen); de andere puzzels komen af en toe langs voor de afwisseling.
-var PZ_ROOSTER = [pzSommen, pzLetterWoord, pzGetalrij, pzWoordSchrijven, pzTellen,
-                  pzRijm, pzSommen, pzVerbindPunten, pzLetterWoord, pzWoordSchrijven,
-                  pzGetalrij, pzRijm, pzPatroon, pzAnders];
+// --- Type 10: splitsen (getalhuisjes) ---
+function pzSplitsen(rng) {
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="'
+        + PZ_KLEUR + '" stroke-width="1">', antw = [];
+  for (var k = 0; k < 3; k++) {
+    var n = 4 + Math.floor(rng() * 7);            // getal op het dak: 4 t/m 10
+    var a = 1 + Math.floor(rng() * (n - 1));      // gegeven deel
+    var x = 3 + k * 33, w = 28, legeLinks = rng() < 0.5;
+    antw.push(n - a);
+    s += '<path d="M' + x + ' 24 L' + (x + w / 2) + ' 5 L' + (x + w) + ' 24 Z"/>'
+       + '<rect x="' + x + '" y="24" width="' + w + '" height="20"/>'
+       + '<line x1="' + (x + w / 2) + '" y1="24" x2="' + (x + w / 2) + '" y2="44"/>'
+       + pzGetal(x + w / 2, 21, n, 10)
+       + pzGetal(legeLinks ? x + w * 0.75 : x + w * 0.25, 38, a, 10);
+  }
+  s += pzAntwoord(antw.join(' · ')) + '</svg>';
+  return { opdracht: 'Splits het getal op het dak. Welk getal hoort in het lege vakje?', svg: s };
+}
+
+// --- Type 11: buurgetallen ---
+function pzBuurgetallen(rng) {
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg">', antw = [];
+  for (var r = 0; r < 2; r++) {
+    var m = 2 + Math.floor(rng() * 18);            // 2 t/m 19, buren dus 1 t/m 20
+    var y = 7 + r * 27;
+    for (var i = 0; i < 3; i++) {
+      var x = 20 + i * 22;
+      if (i === 1) {
+        s += '<rect x="' + x + '" y="' + y + '" width="16" height="18" rx="2" fill="none" stroke="'
+           + PZ_KLEUR + '" stroke-width="1.2"/>' + pzGetal(x + 8, y + 13.5, m, 11);
+      } else {
+        s += '<rect x="' + x + '" y="' + y + '" width="16" height="18" rx="2"' + PZ_STREEP + '/>';
+      }
+    }
+    antw.push((m - 1) + '-' + (m + 1));
+  }
+  s += pzAntwoord(antw.join(' · ')) + '</svg>';
+  return { opdracht: 'Wie zijn de buren? Schrijf het getal ervóór en het getal erna in de vakjes.', svg: s };
+}
+
+// --- Type 12: meer of minder? ---
+function pzMeerMinder(rng) {
+  var soort = PZ_TELSOORTEN[Math.floor(rng() * PZ_TELSOORTEN.length)];
+  var a = 2 + Math.floor(rng() * 8), b;
+  do { b = 2 + Math.floor(rng() * 8); } while (b === a);
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg" fill="' + PZ_KLEUR + '">';
+  [a, b].forEach(function(n, g) {
+    var x0 = 2 + g * 50;
+    s += '<rect x="' + x0 + '" y="2" width="46" height="46" rx="4" fill="none" stroke="'
+       + PZ_KLEUR + '" stroke-width="0.8"/>';
+    for (var i = 0; i < n; i++) {                   // 3x3 raster, netjes te tellen
+      var cx = x0 + 9 + (i % 3) * 14, cy = 10 + Math.floor(i / 3) * 14;
+      s += '<g transform="translate(' + (cx - 5) + ',' + (cy - 5) + ')">' + soort.teken() + '</g>';
+    }
+    s += '<rect x="' + (x0 + 16) + '" y="51" width="14" height="10" rx="1.5"' + PZ_STREEP + '/>';
+  });
+  s += pzAntwoord(a + ' · ' + b) + '</svg>';
+  return { opdracht: 'Tel de ' + soort.naam + ' en schrijf het aantal eronder. Zet een kringetje om het groepje met de meeste.', svg: s };
+}
+
+// --- Type 13: plaatjessom ---
+function pzPlaatjesSom(rng) {
+  var soort = PZ_TELSOORTEN[Math.floor(rng() * PZ_TELSOORTEN.length)];
+  var a = 1 + Math.floor(rng() * 5), b = 1 + Math.floor(rng() * Math.min(5, 10 - a));
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg" fill="' + PZ_KLEUR + '">';
+  [[a, 17], [b, 50]].forEach(function(gr) {        // groepje in eigen kader, boven het eigen vakje
+    s += '<rect x="' + (gr[1] - 15) + '" y="2" width="30" height="31" rx="4" fill="none" stroke="'
+       + PZ_KLEUR + '" stroke-width="0.7"/>';
+    for (var i = 0; i < gr[0]; i++) {
+      var cx = gr[1] - 9 + (i % 3) * 9, cy = 11 + Math.floor(i / 3) * 12;
+      s += '<g transform="translate(' + (cx - 3.75) + ',' + (cy - 3.75) + ') scale(0.75)">' + soort.teken() + '</g>';
+    }
+  });
+  s += pzGetal(83, 24, '?', 14);
+  s += '<rect x="10" y="42" width="14" height="15" rx="1.5"' + PZ_STREEP + '/>' + pzGetal(33, 54, '+', 12)
+     + '<rect x="43" y="42" width="14" height="15" rx="1.5"' + PZ_STREEP + '/>' + pzGetal(66, 54, '=', 12)
+     + '<rect x="76" y="42" width="14" height="15" rx="1.5"' + PZ_STREEP + '/>';
+  s += pzAntwoord(a + '+' + b + '=' + (a + b)) + '</svg>';
+  return { opdracht: 'Tel de ' + soort.naam + ' in elk groepje en schrijf de som op. Hoeveel zijn het er samen?', svg: s };
+}
+
+// --- Type 14: met welke letter begint het? ---
+function pzBeginletter(rng) {
+  var plaatjes = pzSchud(pzPlaatjes(), rng), gekozen = [plaatjes[0]];
+  for (var p = 1; p < plaatjes.length && gekozen.length < 2; p++) {
+    if (plaatjes[p].woord[0] !== gekozen[0].woord[0]) gekozen.push(plaatjes[p]);
+  }
+  var letters = 'abdeghiklmnoprstvwz'.split('');
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg">', antw = [];
+  gekozen.forEach(function(pl, r) {
+    var y = 3 + r * 30, goed = pl.woord[0];
+    var andere = pzSchud(letters.filter(function(l) { return l !== goed; }), rng).slice(0, 2);
+    s += '<g transform="translate(4,' + y + ') scale(2.3)" fill="' + PZ_KLEUR + '">' + pl.teken() + '</g>';
+    pzSchud([goed].concat(andere), rng).forEach(function(l, n) {
+      var cx = 46 + n * 20, cy = y + 12;
+      s += '<circle cx="' + cx + '" cy="' + cy + '" r="8" fill="none" stroke="' + PZ_KLEUR + '" stroke-width="0.8"/>'
+         + '<text x="' + cx + '" y="' + (cy + 4.5) + '" font-size="14" font-weight="700" text-anchor="middle"'
+         + PZ_TAAL + 'fill="' + PZ_KLEUR + '">' + l + '</text>';
+    });
+    antw.push(goed);
+  });
+  s += pzAntwoord(antw.join(' · ')) + '</svg>';
+  return { opdracht: 'Met welke letter begint het woord? Zet een kringetje om de goede letter.', svg: s };
+}
+
+// --- Type 15: welk woord hoort bij het plaatje? ---
+function pzWoordKiezen(rng) {
+  var plaatjes = pzSchud(pzPlaatjes(), rng), goed = plaatjes[0];
+  var keuzes = pzSchud([goed.woord, plaatjes[1].woord, plaatjes[2].woord], rng);
+  // Groot plaatje links, de drie woorden onder elkaar rechts.
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg">'
+        + '<g transform="translate(7,11) scale(4)" fill="' + PZ_KLEUR + '">' + goed.teken() + '</g>';
+  keuzes.forEach(function(w, n) {
+    var cy = 11 + n * 19;
+    s += '<rect x="58" y="' + (cy - 8) + '" width="40" height="16" rx="8" fill="none" stroke="'
+       + PZ_KLEUR + '" stroke-width="0.9"/>'
+       + '<text x="78" y="' + (cy + 4) + '" font-size="11" font-weight="700" text-anchor="middle"'
+       + PZ_TAAL + 'fill="' + PZ_KLEUR + '">' + w + '</text>';
+  });
+  s += pzAntwoord(goed.woord) + '</svg>';
+  return { opdracht: 'Lees de woorden. Zet een kringetje om het woord dat bij het plaatje hoort.', svg: s };
+}
+
+// --- Type 16: hakken en plakken ---
+// Klanken zoals in groep 3: 'aa', 'oo', 'ee', 'oe', 'ui' zijn één klank.
+var PZ_HAKWOORDEN = [
+  ['k','a','t'], ['v','i','s'], ['m','aa','n'], ['r','oo','s'], ['b','oo','m'], ['s','a','p'],
+  ['p','e','n'], ['b','a','l'], ['z','o','n'], ['m','u','s'], ['k','i','p'], ['j','a','s'],
+  ['d','a','k'], ['b','e','d'], ['p','o','p'], ['b','ee','r'], ['v','oe','t'], ['h','ui','s'],
+  ['n','e','k'], ['t','a','k'], ['b','u','s'], ['k','oe','k'], ['z','ee','p'], ['r','aa','m'],
+  ['m','ui','s'], ['b','oe','k'], ['v','aa','s'], ['n','oo','t'], ['p','e','t'], ['l','a','m']
+];
+function pzHakkenPlakken(rng) {
+  var woorden = pzSchud(PZ_HAKWOORDEN.slice(), rng).slice(0, 2);
+  var s = '<svg viewBox="0 0 100 62" xmlns="http://www.w3.org/2000/svg">';
+  // Twee kolommen: klanken bovenaan, daaronder een ruime schrijfstreep.
+  woorden.forEach(function(kl, k) {
+    var mid = 25 + k * 50;
+    // Smalle spaties rond de streepjes: past zo in de kolom (gemeten in Andika).
+    s += '<text x="' + mid + '" y="18" font-size="10.5" font-weight="700" text-anchor="middle"' + PZ_TAAL
+       + 'fill="' + PZ_KLEUR + '">' + kl.join(' - ') + '</text>'
+       + '<text x="' + mid + '" y="31" font-size="9" font-weight="800" text-anchor="middle" fill="'
+       + PZ_KLEUR + '">↓</text>'
+       + '<line x1="' + (mid - 20) + '" y1="48" x2="' + (mid + 20) + '" y2="48" stroke="' + PZ_KLEUR + '" stroke-width="1"/>';
+  });
+  s += pzAntwoord(woorden.map(function(k) { return k.join(''); }).join(' · ')) + '</svg>';
+  return { opdracht: 'Plak de klanken aan elkaar. Welk woord hoor je? Schrijf het op de streep.', svg: s };
+}
+
+// Alle types op vaste volgorde — voor ?puzzel=0..15 (testen/forceren):
+// 0 verbind de punten · 1 tellen · 2 patroon · 3 anders · 4 letter mist
+// 5 sommen · 6 getallenrij · 7 woord schrijven · 8 rijmen · 9 splitsen
+// 10 buurgetallen · 11 meer/minder · 12 plaatjessom · 13 beginletter
+// 14 woord bij plaatje · 15 hakken en plakken
+var PZ_TYPES = [pzVerbindPunten, pzTellen, pzPatroon, pzAnders, pzLetterWoord,
+                pzSommen, pzGetalrij, pzWoordSchrijven, pzRijm, pzSplitsen,
+                pzBuurgetallen, pzMeerMinder, pzPlaatjesSom, pzBeginletter,
+                pzWoordKiezen, pzHakkenPlakken];
+
+// Dagrooster van 4 weken, gericht op groep 3: om en om rekenen en taal
+// (14 + 13 dagen). Verbind de punten (lijntjes trekken) nog maar 1 keer per
+// 4 weken; patroon en "welke is anders?" alleen nog via ?puzzel=.
+var PZ_ROOSTER = [
+  pzSommen,      pzBeginletter,   pzSplitsen,     pzHakkenPlakken, pzBuurgetallen,
+  pzWoordKiezen, pzPlaatjesSom,   pzLetterWoord,  pzGetalrij,      pzRijm,
+  pzMeerMinder,  pzWoordSchrijven, pzTellen,      pzHakkenPlakken, pzSommen,
+  pzBeginletter, pzSplitsen,      pzWoordKiezen,  pzBuurgetallen,  pzLetterWoord,
+  pzPlaatjesSom, pzRijm,          pzGetalrij,     pzWoordSchrijven, pzMeerMinder,
+  pzHakkenPlakken, pzTellen,      pzVerbindPunten
+];
 
 function bouwPuzzel() {
   var forceer = new URLSearchParams(location.search).get('puzzel');
