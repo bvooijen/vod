@@ -805,7 +805,7 @@ textarea { resize: vertical; min-height: 68px; }
         <div class="bron-knoppen">Ververs uit:
           <button class="bron-knop" onclick="verversArtikel(1,'jeugdjournaal.nl',this)">Jeugdjournaal</button>
           <button class="bron-knop" onclick="verversArtikel(1,'nos.nl',this)">NOS</button>
-          <button class="bron-knop" onclick="verversArtikel(1,'rtlnieuws.nl',this)">RTL</button>
+          <button class="bron-knop" onclick="verversArtikel(1,'rtl.nl',this)">RTL</button>
           <span class="bron-status" id="bron-status-1"></span>
         </div>
         <label for="e-t1">Titel</label>
@@ -818,7 +818,7 @@ textarea { resize: vertical; min-height: 68px; }
         <div class="bron-knoppen">Ververs uit:
           <button class="bron-knop" onclick="verversArtikel(2,'jeugdjournaal.nl',this)">Jeugdjournaal</button>
           <button class="bron-knop" onclick="verversArtikel(2,'nos.nl',this)">NOS</button>
-          <button class="bron-knop" onclick="verversArtikel(2,'rtlnieuws.nl',this)">RTL</button>
+          <button class="bron-knop" onclick="verversArtikel(2,'rtl.nl',this)">RTL</button>
           <span class="bron-status" id="bron-status-2"></span>
         </div>
         <label for="e-t2">Titel</label>
@@ -831,7 +831,7 @@ textarea { resize: vertical; min-height: 68px; }
         <div class="bron-knoppen">Ververs uit:
           <button class="bron-knop" onclick="verversArtikel(3,'jeugdjournaal.nl',this)">Jeugdjournaal</button>
           <button class="bron-knop" onclick="verversArtikel(3,'nos.nl',this)">NOS</button>
-          <button class="bron-knop" onclick="verversArtikel(3,'rtlnieuws.nl',this)">RTL</button>
+          <button class="bron-knop" onclick="verversArtikel(3,'rtl.nl',this)">RTL</button>
           <span class="bron-status" id="bron-status-3"></span>
         </div>
         <label for="e-t3">Titel</label>
@@ -1221,8 +1221,13 @@ var KIND_BLOKKADE = new RegExp('\\b(' + [
   'vermoord\\w*','moord\\w*','schietpartij','neergeschoten','beschoten',
   'neergestoken','steekpartij','messteek','mishandel\\w*','misbruik\\w*',
   'verkracht\\w*','ontvoerd?\\w*','gijzel\\w*','zelfmoord','su.cide',
-  'drugs','coca.ne','hero.ne','verslaafd\\w*',
+  'drugs','coca.ne','hero.ne','opium','verslaafd\\w*',
+  'doodslag','celstraf\\w*','gevangenisstraf\\w*',
+  'condoom\\w*','abortus','prostitu\\w*',
   'gewonden?','slachtoffers?','aanrijding','fataal','fatale','crash','verongelukt',
+  // Ook in samenstellingen (treinramp, treinongeluk), maar niet "trampoline"
+  // of "ongelukkig": het woord moet echt eindigen op ramp(en)/ongeluk(ken).
+  '(?!kramp)\\w*ramp(en)?','\\w*ongeluk(ken)?',
   'explosie','ontploft?\\w*','ingestort',
   'seks\\w*','naakt\\w*','porno\\w*','manosphere',
   'extremis\\w*','racis\\w*','discriminat\\w*','antisemit\\w*',
@@ -1810,17 +1815,49 @@ function cleanText(html) {
 }
 
 // ===================== PER-BERICHT VERVERSEN (bron kiezen) =====================
-// Haalt de gefilterde items van één RSS-bron op (NOS of RTL) via rss2json.
-async function haalFeedItems(bron) {
-  var feed = (bron === 'nos.nl') ? 'https://feeds.nos.nl/nosnieuwsalgemeen'
-                                 : 'https://www.rtlnieuws.nl/rss.xml';
-  var r = await fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feed));
-  var j = await r.json();
-  if (!j || j.status !== 'ok' || !j.items) throw new Error('feed leeg');
-  return j.items.filter(function(it) {
-    var x = { title: it.title, description: it.description || it.content || '' };
-    return !isSport(x) && isKindgeschikt(x);
+// RSS-bronnen. Okt 2026: rss2json blokkeert (Cloudflare-controle, 403 zonder
+// CORS) en RTL verhuisde naar rtl.nl — de oude rtlnieuws.nl-feed is nu een mix
+// van nieuws en entertainment. We halen de ruwe XML nu via r.jina.ai
+// (X-Return-Format: html = XML ongewijzigd doorgeven; CORS getest vanaf
+// bvooijen.github.io) en lezen hem zelf uit.
+var FEEDS = {
+  'nos.nl': { url: 'https://feeds.nos.nl/nosnieuwsalgemeen', bron: 'NOS' },
+  'rtl.nl': { url: 'https://www.rtl.nl/nieuws/rss.xml',      bron: 'RTL' }
+};
+
+function rssVeld(item, naam) {
+  var m = item.match(new RegExp('<' + naam + '[^>]*>([\\s\\S]*?)</' + naam + '>', 'i'));
+  if (!m) return '';
+  var cdata = m[1].match(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/);
+  if (cdata) return cdata[1].trim();
+  var ta = document.createElement('textarea');   // &amp; e.d. terug naar tekens
+  ta.innerHTML = m[1];
+  return ta.value.trim();
+}
+
+// Alle items van één feed: { title, description, link, pubDate, source }.
+async function haalFeed(sleutel) {
+  var f = FEEDS[sleutel];
+  var r = await fetchTimeout('https://r.jina.ai/' + f.url, 20000, { 'X-Return-Format': 'html' });
+  if (!r.ok) throw new Error(f.bron + ' HTTP ' + r.status);
+  var xml = await r.text();
+  var items = (xml.match(/<item[\s>][\s\S]*?<\/item>/gi) || []).map(function(it) {
+    return { title: rssVeld(it, 'title'), description: rssVeld(it, 'description'),
+             link: rssVeld(it, 'link'), pubDate: rssVeld(it, 'pubDate'), source: f.bron };
+  }).filter(function(it) {
+    if (!it.title || !it.description) return false;
+    // RTL: alleen echte artikelen; geen uitzendingen, weer-video's of sport.
+    if (f.bron === 'RTL') return /\/artikel\//.test(it.link) && !/\/sport\//.test(it.link);
+    return true;
   });
+  if (!items.length) throw new Error(f.bron + ' feed leeg');
+  return items;
+}
+
+// Gefilterde (kindgeschikte, geen sport) items van één bron, voor de knoppen.
+async function haalFeedItems(bron) {
+  var items = await haalFeed(bron);
+  return items.filter(function(it) { return !isSport(it) && isKindgeschikt(it); });
 }
 
 // Haalt één vers (nog niet getoond) Jeugdjournaal-artikel op.
@@ -1885,26 +1922,11 @@ async function verversArtikel(slot, bron, btn) {
 }
 
 async function loadNieuws() {
-  var proxy  = 'https://api.rss2json.com/v1/api.json?rss_url=';
-  var feeds  = [
-    'https://feeds.nos.nl/nosnieuwsalgemeen',
-    'https://www.rtlnieuws.nl/rss.xml'
-  ];
-
-  var results = await Promise.allSettled(
-    feeds.map(function(url) {
-      return fetch(proxy + encodeURIComponent(url)).then(function(r) { return r.json(); });
-    })
-  );
-
+  // Beide feeds tegelijk; als er één faalt gaan we door met de andere.
+  var results = await Promise.allSettled([haalFeed('nos.nl'), haalFeed('rtl.nl')]);
   var items = [];
-  results.forEach(function(res, i) {
-    if (res.status === 'fulfilled' && res.value && res.value.status === 'ok' && res.value.items) {
-      res.value.items.forEach(function(item) {
-        items.push({ title: item.title, description: item.description || item.content || '',
-                     pubDate: item.pubDate, source: i === 0 ? 'NOS' : 'RTL' });
-      });
-    }
+  results.forEach(function(res) {
+    if (res.status === 'fulfilled') items = items.concat(res.value);
   });
   if (items.length === 0) throw new Error('geen artikelen');
 
@@ -1951,7 +1973,7 @@ async function loadNieuws() {
     var tekst = await slimVerkortTekst(stripAanhef(cleanText(item.description), item.title));
     document.getElementById('e-t' + (idx + 1)).value = kop;
     document.getElementById('e-b' + (idx + 1)).value = tekst;
-    BRONNEN[idx + 1] = (item.source === 'NOS') ? 'nos.nl' : 'rtlnieuws.nl';
+    BRONNEN[idx + 1] = (item.source === 'NOS') ? 'nos.nl' : 'rtl.nl';
     nosrtlGetoond[item.title] = true;
   }));
   update();
