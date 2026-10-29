@@ -1820,9 +1820,14 @@ function cleanText(html) {
 // van nieuws en entertainment. We halen de ruwe XML nu via r.jina.ai
 // (X-Return-Format: html = XML ongewijzigd doorgeven; CORS getest vanaf
 // bvooijen.github.io) en lezen hem zelf uit.
+// RTL's algemene nieuwsfeed is klein (±5 artikelen) en vaak heftig, dus daar
+// bleef na het kindfilter vaak niets over. De rubrieken opmerkelijk (vooraan:
+// past het best bij kinderen), binnenland en buitenland leveren samen genoeg.
 var FEEDS = {
-  'nos.nl': { url: 'https://feeds.nos.nl/nosnieuwsalgemeen', bron: 'NOS' },
-  'rtl.nl': { url: 'https://www.rtl.nl/nieuws/rss.xml',      bron: 'RTL' }
+  'nos.nl': { bron: 'NOS', urls: ['https://feeds.nos.nl/nosnieuwsalgemeen'] },
+  'rtl.nl': { bron: 'RTL', urls: ['https://www.rtl.nl/nieuws/opmerkelijk/rss.xml',
+                                  'https://www.rtl.nl/nieuws/binnenland/rss.xml',
+                                  'https://www.rtl.nl/nieuws/buitenland/rss.xml'] }
 };
 
 function rssVeld(item, naam) {
@@ -1836,19 +1841,30 @@ function rssVeld(item, naam) {
 }
 
 // Alle items van één feed: { title, description, link, pubDate, source }.
+async function haalEenFeed(url, bron) {
+  var r = await fetchTimeout('https://r.jina.ai/' + url, 20000, { 'X-Return-Format': 'html' });
+  if (!r.ok) throw new Error(bron + ' HTTP ' + r.status);
+  var xml = await r.text();
+  return (xml.match(/<item[\s>][\s\S]*?<\/item>/gi) || []).map(function(it) {
+    return { title: rssVeld(it, 'title'), description: rssVeld(it, 'description'),
+             link: rssVeld(it, 'link'), pubDate: rssVeld(it, 'pubDate'), source: bron };
+  });
+}
+
 async function haalFeed(sleutel) {
   var f = FEEDS[sleutel];
-  var r = await fetchTimeout('https://r.jina.ai/' + f.url, 20000, { 'X-Return-Format': 'html' });
-  if (!r.ok) throw new Error(f.bron + ' HTTP ' + r.status);
-  var xml = await r.text();
-  var items = (xml.match(/<item[\s>][\s\S]*?<\/item>/gi) || []).map(function(it) {
-    return { title: rssVeld(it, 'title'), description: rssVeld(it, 'description'),
-             link: rssVeld(it, 'link'), pubDate: rssVeld(it, 'pubDate'), source: f.bron };
-  }).filter(function(it) {
-    if (!it.title || !it.description) return false;
-    // RTL: alleen echte artikelen; geen uitzendingen, weer-video's of sport.
-    if (f.bron === 'RTL') return /\/artikel\//.test(it.link) && !/\/sport\//.test(it.link);
-    return true;
+  // Alle feeds van de bron tegelijk; faalt er één, dan gaan we door met de rest.
+  var res = await Promise.allSettled(f.urls.map(function(u) { return haalEenFeed(u, f.bron); }));
+  var gezien = {}, items = [];
+  res.forEach(function(rs) {
+    if (rs.status !== 'fulfilled') return;
+    rs.value.forEach(function(it) {
+      if (!it.title || !it.description || gezien[it.link]) return;
+      // RTL: alleen echte artikelen; geen uitzendingen, weer-video's of sport.
+      if (f.bron === 'RTL' && (!/\/artikel\//.test(it.link) || /\/sport\//.test(it.link))) return;
+      gezien[it.link] = true;
+      items.push(it);
+    });
   });
   if (!items.length) throw new Error(f.bron + ' feed leeg');
   return items;
