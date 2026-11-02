@@ -549,6 +549,18 @@ textarea { resize: vertical; min-height: 68px; }
   font-weight: 700;
   margin-bottom: 5px;
 }
+/* Rekenpuzzel (naast bericht 2) in het oranje van het vroegere 3e bericht;
+   de taalpuzzel onderaan houdt het groen. */
+.puzzel-box.reken { background: #FFF5E0; border-top-color: #F0A202; }
+.puzzel-box.reken .puzzel-label { color: #C77F00; }
+/* De rekenpuzzel bepaalt de rijhoogte NIET zelf: het plaatje vult precies de
+   ruimte die bericht 2 ernaast overlaat (absoluut gepositioneerd, schaalt mee
+   met behoud van verhouding). Zo wordt de krant nooit hoger dan met het oude
+   3e bericht. min-height = vangnet als bericht 2 erg kort is. */
+.artikel-rij .puzzel-svg { flex: 1 1 0; min-height: 120px; position: relative; }
+.artikel-rij .puzzel-svg svg {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%; max-height: none;
+}
 .puzzel-opdracht { font-size: 0.9rem; color: #2b3440; line-height: 1.35; margin-bottom: 6px; }
 .puzzel-svg { flex: 1; display: flex; align-items: center; justify-content: center; }
 .puzzel-svg svg { width: 100%; height: auto; max-height: 150px; }
@@ -680,7 +692,7 @@ textarea { resize: vertical; min-height: 68px; }
     display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden;
   }
   .artikel.hoofd .artikel-tekst { font-size: 1.1rem; -webkit-line-clamp: 4; }
-  /* Katern 2+3: smallere kolommen krijgen meer regels, zodat het echte artikelen zijn */
+  /* Bericht 2 (naast de rekenpuzzel): smallere kolom krijgt meer regels */
   .artikel-rij .artikel-tekst { -webkit-line-clamp: 8; }
   .artikel-rij .artikel { padding-bottom: 13px; }
   /* Kop max 70 tekens (in JS afgedwongen); 3e regel als vangnet tegen "…" */
@@ -703,6 +715,7 @@ textarea { resize: vertical; min-height: 68px; }
   .puzzel-label { font-size: 0.66rem; margin-bottom: 4px; }
   .puzzel-opdracht { font-size: 0.8rem; line-height: 1.3; margin-bottom: 4px; }
   .puzzel-svg svg { max-height: 128px; }
+  .artikel-rij .puzzel-svg { min-height: 100px; }
 
   .krant-footer { padding: 5px 12px; font-size: 0.66rem; }
 
@@ -740,6 +753,9 @@ textarea { resize: vertical; min-height: 68px; }
   body.print-compact .puzzel-box { padding: 7px 12px; }
   body.print-compact .puzzel-opdracht { font-size: 0.74rem; margin-bottom: 3px; }
   body.print-compact .puzzel-svg svg { max-height: 108px; }
+  /* Rekenpuzzel vult de ruimte naast bericht 2; geen eigen max-hoogte */
+  body.print-compact .artikel-rij .puzzel-svg { min-height: 84px; }
+  body.print-compact .artikel-rij .puzzel-svg svg { max-height: none; }
   body.print-compact .krant-footer { padding: 5px 12px; font-size: 0.6rem; }
 }
 </style>
@@ -825,19 +841,6 @@ textarea { resize: vertical; min-height: 68px; }
         <input type="text" id="e-t2" placeholder="Laden…" oninput="update()">
         <label for="e-b2">Tekst</label>
         <textarea id="e-b2" placeholder="Laden…" oninput="update()"></textarea>
-      </div>
-      <div class="news-block">
-        <div class="block-label">Bericht 3 &mdash; vandaag / verwacht <span class="taal-tag" id="taal-3"></span></div>
-        <div class="bron-knoppen">Ververs uit:
-          <button class="bron-knop" onclick="verversArtikel(3,'jeugdjournaal.nl',this)">Jeugdjournaal</button>
-          <button class="bron-knop" onclick="verversArtikel(3,'nos.nl',this)">NOS</button>
-          <button class="bron-knop" onclick="verversArtikel(3,'rtl.nl',this)">RTL</button>
-          <span class="bron-status" id="bron-status-3"></span>
-        </div>
-        <label for="e-t3">Titel</label>
-        <input type="text" id="e-t3" placeholder="Laden…" oninput="update()">
-        <label for="e-b3">Tekst</label>
-        <textarea id="e-b3" placeholder="Laden…" oninput="update()"></textarea>
       </div>
     </div>
   </div>
@@ -1033,13 +1036,12 @@ textarea { resize: vertical; min-height: 68px; }
         <div class="artikel-kop" id="k-t2">Laden&hellip;</div>
         <div class="artikel-tekst" id="k-b2">&nbsp;</div>
       </div>
-      <div class="artikel a3">
-        <div class="artikel-top">
-          <div class="artikel-badge">3</div>
-          <div class="artikel-bron" id="k-bron3"></div>
-        </div>
-        <div class="artikel-kop" id="k-t3">Laden&hellip;</div>
-        <div class="artikel-tekst" id="k-b3">&nbsp;</div>
+      <!-- Op de plek van het vroegere 3e bericht: de rekenpuzzel -->
+      <div class="puzzel-box reken">
+        <span class="puzzel-star">&#128290;</span>
+        <div class="puzzel-label">Rekenpuzzel van de dag</div>
+        <div class="puzzel-opdracht" id="k-reken-opdracht">Laden&hellip;</div>
+        <div class="puzzel-svg" id="k-reken-svg"></div>
       </div>
     </div>
 
@@ -1052,11 +1054,11 @@ textarea { resize: vertical; min-height: 68px; }
           <img class="wjd-img" id="k-wjd-img" alt="" style="display:none">
         </div>
       </div>
-      <div class="puzzel-box">
-        <span class="puzzel-star">&#129513;</span>
-        <div class="puzzel-label">Puzzel van de dag</div>
-        <div class="puzzel-opdracht" id="k-puzzel-opdracht">Laden&hellip;</div>
-        <div class="puzzel-svg" id="k-puzzel-svg"></div>
+      <div class="puzzel-box taal">
+        <span class="puzzel-star">&#128292;</span>
+        <div class="puzzel-label">Taalpuzzel van de dag</div>
+        <div class="puzzel-opdracht" id="k-taal-opdracht">Laden&hellip;</div>
+        <div class="puzzel-svg" id="k-taal-svg"></div>
       </div>
     </div>
   </div>
@@ -1508,7 +1510,7 @@ function update() {
   document.getElementById('k-weericon').innerHTML = ICONS[weertype] || ICONS.halfbewolkt;
   document.getElementById('k-temp').textContent   = temp ? temp + '°C' : '–°C';
   document.getElementById('k-weerdesc').textContent = weerdesc || 'Laden…';
-  for (var n = 1; n <= 3; n++) {
+  for (var n = 1; n <= AANTAL_BERICHTEN; n++) {
     var titel    = document.getElementById('e-t' + n).value;
     var berTekst = document.getElementById('e-b' + n).value;
     document.getElementById('k-t' + n).textContent = titel || 'Laden…';
@@ -1655,7 +1657,10 @@ function slugNaarTekst(url) {
 }
 
 // Bronvermelding per artikel (domein), getoond naast het bolletje.
-var BRONNEN = { 1: '', 2: '', 3: '' };
+// Twee nieuwsberichten (nov 2026: het 3e bericht maakte plaats voor de
+// rekenpuzzel). Alle lussen over berichten gebruiken deze constante.
+var AANTAL_BERICHTEN = 2;
+var BRONNEN = { 1: '', 2: '' };
 function domeinVanUrl(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); }
   catch(e) { return ''; }
@@ -1682,11 +1687,11 @@ async function jjZoekUrls() {
 }
 
 async function loadJeugdjournaal() {
-  // Haalt de 3 berichten één voor één op (sequentieel). allorigins struikelt
+  // Haalt de berichten één voor één op (sequentieel). allorigins struikelt
   // over te veel gelijktijdige aanvragen; per stuk werkt betrouwbaar. Snelheid
   // maakt niet uit. haalEenJeugdjournaal roteert door verse artikelen en gooit
   // een fout als het niet lukt → dan valt de krant terug op NOS/RTL.
-  for (var idx = 0; idx < 3; idx++) {
+  for (var idx = 0; idx < AANTAL_BERICHTEN; idx++) {
     var a = await haalEenJeugdjournaal();
     var budget = (idx === 0) ? KOP_BUDGET : KOP_BUDGET_KATERN;
     document.getElementById('e-t' + (idx + 1)).value = await slimVerkortKop(a.title, budget);
@@ -1962,7 +1967,7 @@ async function loadNieuws() {
   var nonSportToday  = todayItems.filter(geschikt);
   var allNonSport    = items.filter(geschikt);
   // Alles al eens getoond? Begin opnieuw met roteren.
-  if (allNonSport.length < 3) {
+  if (allNonSport.length < AANTAL_BERICHTEN) {
     nosrtlGetoond = {};
     var vers = function(i) { return !isSport(i) && isKindgeschikt(i); };
     nonSportYest  = yesterItems.filter(vers);
@@ -1975,14 +1980,13 @@ async function loadNieuws() {
   }
 
   var b1 = nonSportYest[0]  || allNonSport[0]  || items[0];
-  var b2 = pickUnique(nonSportYest, [b1])
-        || pickUnique(allNonSport,  [b1])
+  // Bericht 2: liefst van vandaag (vers), anders van gisteren of wat er is.
+  var b2 = pickUnique(nonSportToday, [b1])
+        || pickUnique(nonSportYest,  [b1])
+        || pickUnique(allNonSport,   [b1])
         || items.find(function(i) { return i !== b1; });
-  var b3 = pickUnique(nonSportToday, [b1, b2])
-        || pickUnique(allNonSport,   [b1, b2])
-        || items.find(function(i) { return i !== b1 && i !== b2; });
 
-  await Promise.all([b1, b2, b3].map(async function(item, idx) {
+  await Promise.all([b1, b2].map(async function(item, idx) {
     if (!item) return;
     var kopBudget = (idx === 0) ? KOP_BUDGET : KOP_BUDGET_KATERN;
     var kop   = await slimVerkortKop(item.title || '', kopBudget);
@@ -2741,35 +2745,48 @@ var PZ_TYPES = [pzVerbindPunten, pzTellen, pzPatroon, pzAnders, pzLetterWoord,
                 pzBuurgetallen, pzMeerMinder, pzPlaatjesSom, pzBeginletter,
                 pzWoordKiezen, pzHakkenPlakken];
 
-// Dagrooster van 4 weken, gericht op groep 3: om en om rekenen en taal
-// (14 + 13 dagen). Verbind de punten (lijntjes trekken) nog maar 1 keer per
-// 4 weken; patroon en "welke is anders?" alleen nog via ?puzzel=.
-var PZ_ROOSTER = [
-  pzSommen,      pzBeginletter,   pzSplitsen,     pzHakkenPlakken, pzBuurgetallen,
-  pzWoordKiezen, pzPlaatjesSom,   pzLetterWoord,  pzGetalrij,      pzRijm,
-  pzMeerMinder,  pzWoordSchrijven, pzTellen,      pzHakkenPlakken, pzSommen,
-  pzBeginletter, pzSplitsen,      pzWoordKiezen,  pzBuurgetallen,  pzLetterWoord,
-  pzPlaatjesSom, pzRijm,          pzGetalrij,     pzWoordSchrijven, pzMeerMinder,
-  pzHakkenPlakken, pzTellen,      pzVerbindPunten
+// Elke dag twee puzzels (groep 3): één taalpuzzel (onderaan, naast "Wist je
+// dat") en één rekenpuzzel (naast bericht 2). Elk met een eigen dagrooster;
+// de lengtes verschillen (12 en 15), dus de combinatie wisselt steeds.
+var PZ_TAALSOORTEN = [pzLetterWoord, pzWoordSchrijven, pzRijm, pzBeginletter,
+                      pzWoordKiezen, pzHakkenPlakken];
+var PZ_ROOSTER_TAAL = [
+  pzBeginletter, pzHakkenPlakken, pzWoordKiezen, pzLetterWoord, pzRijm,          pzWoordSchrijven,
+  pzHakkenPlakken, pzBeginletter, pzLetterWoord, pzWoordKiezen, pzWoordSchrijven, pzRijm
+];
+// Verbind de punten (lijntjes trekken) nog maar 1 keer per 15 dagen;
+// patroon en "welke is anders?" alleen nog via ?puzzel=.
+var PZ_ROOSTER_REKEN = [
+  pzSommen,   pzSplitsen, pzBuurgetallen, pzPlaatjesSom, pzGetalrij,     pzMeerMinder, pzTellen,
+  pzSplitsen, pzSommen,   pzGetalrij,     pzBuurgetallen, pzTellen,      pzPlaatjesSom, pzMeerMinder,
+  pzVerbindPunten
 ];
 
+function maakPuzzel(fn, seed) {
+  try { return fn(pzRng(seed)); }
+  catch (e) { return { opdracht: 'Teken je eigen tekening in dit vak!', svg: '' }; }
+}
+function toonPuzzel(soort, p) {
+  document.getElementById('k-' + soort + '-opdracht').textContent = p.opdracht;
+  document.getElementById('k-' + soort + '-svg').innerHTML = p.svg;
+}
+
 function bouwPuzzel() {
+  var dag = pzDagnummer();
+  var ti = dag % PZ_ROOSTER_TAAL.length, ri = dag % PZ_ROOSTER_REKEN.length;
+  // Seed op dagnummer + index (elke dag een verse indeling); de rekenpuzzel
+  // krijgt een andere seed-offset zodat beide nooit dezelfde loting delen.
+  var taal  = maakPuzzel(PZ_ROOSTER_TAAL[ti],  dag * 7 + ti * 101 + 13);
+  var reken = maakPuzzel(PZ_ROOSTER_REKEN[ri], dag * 7 + ri * 101 + 977);
+  // Testen: ?puzzel=N (0..15) toont dat type in het vak waar het bij hoort.
   var forceer = new URLSearchParams(location.search).get('puzzel');
-  var geforceerd = (forceer !== null && forceer !== '');
-  // Normaal volgt de puzzel het dagrooster (lezen/schrijven/rekenen voorop);
-  // met ?puzzel=N kun je een specifiek type forceren om te testen.
-  var lijst = geforceerd ? PZ_TYPES : PZ_ROOSTER;
-  var idx = geforceerd ? (parseInt(forceer, 10) % PZ_TYPES.length) : (pzDagnummer() % PZ_ROOSTER.length);
-  // Seed op dagnummer, plus index zodat elke dag een verse indeling geeft.
-  var rng = pzRng(pzDagnummer() * 7 + idx * 101 + 13);
-  var p;
-  try {
-    p = lijst[idx](rng);
-  } catch (e) {
-    p = { opdracht: 'Teken je eigen tekening in dit vak!', svg: '' };
+  if (forceer !== null && forceer !== '') {
+    var fi = parseInt(forceer, 10) % PZ_TYPES.length, fn = PZ_TYPES[fi];
+    var p = maakPuzzel(fn, dag * 7 + fi * 101 + 13);
+    if (PZ_TAALSOORTEN.indexOf(fn) !== -1) taal = p; else reken = p;
   }
-  document.getElementById('k-puzzel-opdracht').textContent = p.opdracht;
-  document.getElementById('k-puzzel-svg').innerHTML = p.svg;
+  toonPuzzel('taal', taal);
+  toonPuzzel('reken', reken);
 }
 
 // ===================== WIST JE DAT =====================
@@ -2821,7 +2838,7 @@ async function reloadNieuws() {
   btn.disabled    = true;
   btn.textContent = '↻ Laden…';
   // Clear fields while loading
-  for (var n = 1; n <= 3; n++) {
+  for (var n = 1; n <= AANTAL_BERICHTEN; n++) {
     document.getElementById('e-t' + n).value = '';
     document.getElementById('e-b' + n).value = '';
   }
@@ -2850,9 +2867,7 @@ var NOOD_BERICHTEN = [
   { t: 'Het echte nieuws kon vandaag niet worden opgehaald',
     b: 'Het internet of de nieuwsdienst deed het vandaag niet mee. Morgen lees je gewoon weer het echte nieuws van die dag!' },
   { t: 'Vraag het aan papa of mama',
-    b: 'Weet jij wat er vandaag in de wereld gebeurd is? Vraag het gerust aan papa of mama bij het ontbijt.' },
-  { t: 'Een dagje zonder internetnieuws',
-    b: 'Soms werkt het internet even niet. Geen zorgen: de krant is er morgen weer helemaal, met vers nieuws!' }
+    b: 'Weet jij wat er vandaag in de wereld gebeurd is? Vraag het gerust aan papa of mama bij het ontbijt.' }
 ];
 
 async function autoLoadNoodmodus() {
